@@ -1,0 +1,11 @@
+daemon:
+  poll_interval: 2.0
+  idle_threshold: 300
+
+collectors:
+  enabled:
+    - chrome
+    - generic
+
+storage:
+  db_path: ./data/life_optimizer.db
