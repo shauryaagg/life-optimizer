@@ -23,6 +23,14 @@ from life_optimizer.storage.repositories import (
 
 logger = logging.getLogger(__name__)
 
+# Try to import WorkspaceListener; it is optional
+try:
+    from life_optimizer.daemon.workspace_listener import WorkspaceListener
+
+    _HAS_WORKSPACE_LISTENER = True
+except ImportError:
+    _HAS_WORKSPACE_LISTENER = False
+
 # AppleScript to detect the frontmost application
 FRONTMOST_APP_SCRIPT = """tell application "System Events"
     set frontApp to first application process whose frontmost is true
@@ -49,6 +57,8 @@ class Daemon:
         self._screenshot_scheduler: ScreenshotScheduler | None = None
         self._current_session_id: int | None = None
         self._session_event_count: int = 0
+        self._workspace_listener: object | None = None
+        self._event_queue: asyncio.Queue | None = None
 
     async def start(self) -> None:
         """Initialize all components and start the main polling loop."""
@@ -92,19 +102,47 @@ class Daemon:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, lambda: asyncio.create_task(self.stop()))
 
+        # Start NSWorkspace listener (optional — falls back to polling if unavailable)
+        workspace_status = "unavailable"
+        if _HAS_WORKSPACE_LISTENER:
+            try:
+                self._event_queue = asyncio.Queue()
+                self._workspace_listener = WorkspaceListener(
+                    self._event_queue, loop
+                )
+                self._workspace_listener.start()
+                workspace_status = "active"
+            except Exception as e:
+                logger.warning(
+                    "NSWorkspace listener failed to start, using polling only: %s", e
+                )
+                self._workspace_listener = None
+                workspace_status = "failed"
+        else:
+            logger.info(
+                "pyobjc not available, using polling only for app detection"
+            )
+
         logger.info("Daemon started. Press Ctrl+C to stop.")
         print("=" * 60)
-        print("Life Optimizer — Activity Monitor")
+        print("Life Optimizer -- Activity Monitor")
         print(f"Database: {self._config.storage.db_path}")
         print(f"Poll interval: {self._config.daemon.poll_interval}s")
         print(f"Screenshots: {'enabled' if sc_config.enabled else 'disabled'}")
+        print(f"NSWorkspace listener: {workspace_status}")
         print("=" * 60)
 
         try:
-            await self._main_loop()
+            # Run both the polling loop and event queue consumer concurrently
+            tasks = [asyncio.create_task(self._main_loop())]
+            if self._workspace_listener is not None and self._event_queue is not None:
+                tasks.append(asyncio.create_task(self._process_workspace_events()))
+            await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             pass
         finally:
+            if self._workspace_listener is not None:
+                self._workspace_listener.stop()
             await self._cleanup()
 
     async def stop(self) -> None:
@@ -136,6 +174,83 @@ class Daemon:
                 logger.error("Error during poll: %s", e, exc_info=True)
 
             await asyncio.sleep(self._config.daemon.poll_interval)
+
+    async def _process_workspace_events(self) -> None:
+        """Drain the NSWorkspace event queue and handle app-switch events."""
+        while self._running:
+            try:
+                event = await asyncio.wait_for(
+                    self._event_queue.get(), timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                continue
+            except Exception:
+                continue
+
+            try:
+                app_name = event.get("app_name", "")
+                bundle_id = event.get("bundle_id", "")
+                if not app_name:
+                    continue
+
+                logger.debug(
+                    "NSWorkspace event: %s (%s)", app_name, bundle_id
+                )
+
+                # Trigger an immediate poll for this app switch
+                await self._handle_app_switch_event(app_name, bundle_id)
+            except Exception as e:
+                logger.error("Error processing workspace event: %s", e)
+
+    async def _handle_app_switch_event(
+        self, app_name: str, bundle_id: str
+    ) -> None:
+        """Handle an app-switch event from the NSWorkspace listener."""
+        if app_name == self._previous_app:
+            return  # Not actually a switch
+
+        self._previous_result = None  # Reset dedup
+
+        # End previous session and start new one
+        await self._end_current_session()
+        if self._session_repo is not None:
+            self._current_session_id = await self._session_repo.start_session(
+                app_name, bundle_id
+            )
+
+        # Screenshot on app switch
+        if (
+            self._screenshot_scheduler is not None
+            and self._config.screenshots.capture_on_app_switch
+        ):
+            ss_result = await self._screenshot_scheduler.on_app_switch(app_name)
+            if ss_result is not None and self._screenshot_repo is not None:
+                await self._screenshot_repo.insert_screenshot(ss_result)
+
+        # Get the appropriate collector and collect data
+        collector = self._registry.get_collector(app_name)
+        result = await collector.collect(app_name, bundle_id)
+        if result is not None:
+            result.event_type = APP_ACTIVATE
+
+            event_id = await self._repo.insert_event(result)
+            self._session_event_count += 1
+
+            context_str = ""
+            if result.context:
+                url = result.context.get("url", "")
+                if url:
+                    context_str = f" | {url}"
+
+            timestamp = result.timestamp.strftime("%H:%M:%S")
+            print(
+                f"[{timestamp}] {result.event_type:15s} | {result.app_name:20s} "
+                f"| {result.window_title or '(no title)':40s}{context_str}"
+            )
+
+            self._previous_result = result
+
+        self._previous_app = app_name
 
     async def _end_current_session(self) -> None:
         """End the current session if one is active."""
