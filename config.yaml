@@ -23,3 +23,14 @@ screenshots:
   scale: 0.5
   capture_on_app_switch: true
   retention_days: 30
+
+llm:
+  provider: claude
+  claude:
+    model: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+  ollama:
+    model: llama3.1:8b
+    base_url: http://localhost:11434
+  batch_interval: 3600
+  daily_insight_time: "22:00"

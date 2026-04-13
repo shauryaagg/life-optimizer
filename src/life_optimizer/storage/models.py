@@ -8,7 +8,7 @@ from datetime import datetime
 # Re-export CollectorResult for convenience
 from life_optimizer.collectors.base import CollectorResult
 
-__all__ = ["CollectorResult", "ActivityEvent", "Screenshot", "Session"]
+__all__ = ["CollectorResult", "ActivityEvent", "Screenshot", "Session", "Summary"]
 
 
 @dataclass
@@ -62,4 +62,20 @@ class Session:
     category: str | None = None
     subcategory: str | None = None
     event_count: int = 0
+    created_at: str = ""
+
+
+@dataclass
+class Summary:
+    """Represents a periodic summary from the summaries table."""
+
+    id: int
+    period_type: str
+    period_start: str
+    period_end: str
+    summary_text: str
+    category_breakdown: str | None = None
+    top_activities: str | None = None
+    insights: str | None = None
+    model_used: str | None = None
     created_at: str = ""

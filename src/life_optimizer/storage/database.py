@@ -59,6 +59,20 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_time ON sessions(start_time, end_time);
+
+CREATE TABLE IF NOT EXISTS summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period_type TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    summary_text TEXT NOT NULL,
+    category_breakdown TEXT,
+    top_activities TEXT,
+    insights TEXT,
+    model_used TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_summaries_period ON summaries(period_type, period_start);
 """
 
 

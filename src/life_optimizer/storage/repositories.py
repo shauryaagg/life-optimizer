@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from life_optimizer.collectors.base import CollectorResult
 from life_optimizer.screenshots.capture import ScreenshotResult
 from life_optimizer.storage.database import Database
-from life_optimizer.storage.models import ActivityEvent, Screenshot, Session
+from life_optimizer.storage.models import ActivityEvent, Screenshot, Session, Summary
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +126,107 @@ class EventRepository:
         cursor = await conn.execute("SELECT COUNT(*) FROM events")
         row = await cursor.fetchone()
         return row[0] if row else 0
+
+    async def update_event_category(
+        self, event_id: int, category: str, subcategory: str
+    ) -> None:
+        """Update the category and subcategory of an event.
+
+        Args:
+            event_id: ID of the event to update.
+            category: Category to set.
+            subcategory: Subcategory to set.
+        """
+        conn = self._db.connection
+        await conn.execute(
+            "UPDATE events SET category = ?, subcategory = ? WHERE id = ?",
+            (category, subcategory, event_id),
+        )
+        await conn.commit()
+
+    async def get_uncategorized_events(self, limit: int = 500) -> list[ActivityEvent]:
+        """Retrieve events that have not been categorized yet.
+
+        Args:
+            limit: Maximum number of events to return.
+
+        Returns:
+            List of ActivityEvent instances without a category.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            SELECT id, timestamp, app_name, app_bundle_id, event_type,
+                   window_title, context_json, duration_seconds, category,
+                   subcategory, is_idle, created_at
+            FROM events
+            WHERE category IS NULL
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [
+            ActivityEvent(
+                id=row[0],
+                timestamp=row[1],
+                app_name=row[2],
+                app_bundle_id=row[3],
+                event_type=row[4],
+                window_title=row[5],
+                context_json=row[6],
+                duration_seconds=row[7],
+                category=row[8],
+                subcategory=row[9],
+                is_idle=row[10] or 0,
+                created_at=row[11] or "",
+            )
+            for row in rows
+        ]
+
+    async def get_events_between(
+        self, start: str, end: str
+    ) -> list[ActivityEvent]:
+        """Retrieve events within a time range.
+
+        Args:
+            start: ISO format start time (inclusive).
+            end: ISO format end time (inclusive).
+
+        Returns:
+            List of ActivityEvent instances ordered by timestamp ascending.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            SELECT id, timestamp, app_name, app_bundle_id, event_type,
+                   window_title, context_json, duration_seconds, category,
+                   subcategory, is_idle, created_at
+            FROM events
+            WHERE timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC
+            """,
+            (start, end),
+        )
+        rows = await cursor.fetchall()
+        return [
+            ActivityEvent(
+                id=row[0],
+                timestamp=row[1],
+                app_name=row[2],
+                app_bundle_id=row[3],
+                event_type=row[4],
+                window_title=row[5],
+                context_json=row[6],
+                duration_seconds=row[7],
+                category=row[8],
+                subcategory=row[9],
+                is_idle=row[10] or 0,
+                created_at=row[11] or "",
+            )
+            for row in rows
+        ]
 
 
 class ScreenshotRepository:
@@ -344,3 +445,171 @@ class SessionRepository:
             )
             for row in rows
         ]
+
+
+class SummaryRepository:
+    """Repository for periodic summary operations."""
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    async def insert_summary(
+        self,
+        period_type: str,
+        period_start: str,
+        period_end: str,
+        summary_text: str,
+        category_breakdown: str | None = None,
+        top_activities: str | None = None,
+        insights: str | None = None,
+        model_used: str | None = None,
+    ) -> int:
+        """Insert a summary and return the new row ID.
+
+        Args:
+            period_type: Type of period (e.g. "hourly", "daily").
+            period_start: ISO format start time.
+            period_end: ISO format end time.
+            summary_text: The summary text.
+            category_breakdown: JSON string of category breakdown.
+            top_activities: JSON string of top activities.
+            insights: Insights text.
+            model_used: Name of the model used to generate.
+
+        Returns:
+            The auto-generated row ID.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            INSERT INTO summaries (period_type, period_start, period_end,
+                                   summary_text, category_breakdown,
+                                   top_activities, insights, model_used)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                period_type,
+                period_start,
+                period_end,
+                summary_text,
+                category_breakdown,
+                top_activities,
+                insights,
+                model_used,
+            ),
+        )
+        await conn.commit()
+        row_id = cursor.lastrowid
+        logger.debug("Inserted %s summary id=%d", period_type, row_id)
+        return row_id
+
+    async def get_summaries(
+        self,
+        period_type: str | None = None,
+        date: str | None = None,
+        limit: int = 100,
+    ) -> list[Summary]:
+        """Retrieve summaries with optional filtering.
+
+        Args:
+            period_type: Filter by period type (e.g. "hourly", "daily").
+            date: Filter by date (YYYY-MM-DD format, matches period_start).
+            limit: Maximum number of summaries to return.
+
+        Returns:
+            List of Summary instances, ordered by period_start descending.
+        """
+        conn = self._db.connection
+        conditions = []
+        params: list = []
+
+        if period_type:
+            conditions.append("period_type = ?")
+            params.append(period_type)
+        if date:
+            conditions.append("period_start LIKE ?")
+            params.append(f"{date}%")
+
+        where = ""
+        if conditions:
+            where = "WHERE " + " AND ".join(conditions)
+
+        query = f"""
+            SELECT id, period_type, period_start, period_end, summary_text,
+                   category_breakdown, top_activities, insights, model_used,
+                   created_at
+            FROM summaries
+            {where}
+            ORDER BY period_start DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+
+        return [
+            Summary(
+                id=row[0],
+                period_type=row[1],
+                period_start=row[2],
+                period_end=row[3],
+                summary_text=row[4],
+                category_breakdown=row[5],
+                top_activities=row[6],
+                insights=row[7],
+                model_used=row[8],
+                created_at=row[9] or "",
+            )
+            for row in rows
+        ]
+
+    async def get_latest_summary(
+        self, period_type: str
+    ) -> Summary | None:
+        """Get the most recent summary of a given type.
+
+        Args:
+            period_type: Type of period to retrieve.
+
+        Returns:
+            The most recent Summary, or None.
+        """
+        summaries = await self.get_summaries(period_type=period_type, limit=1)
+        return summaries[0] if summaries else None
+
+    async def get_summary_by_id(self, summary_id: int) -> Summary | None:
+        """Get a summary by its ID.
+
+        Args:
+            summary_id: ID of the summary.
+
+        Returns:
+            The Summary, or None if not found.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            SELECT id, period_type, period_start, period_end, summary_text,
+                   category_breakdown, top_activities, insights, model_used,
+                   created_at
+            FROM summaries
+            WHERE id = ?
+            """,
+            (summary_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return Summary(
+            id=row[0],
+            period_type=row[1],
+            period_start=row[2],
+            period_end=row[3],
+            summary_text=row[4],
+            category_breakdown=row[5],
+            top_activities=row[6],
+            insights=row[7],
+            model_used=row[8],
+            created_at=row[9] or "",
+        )

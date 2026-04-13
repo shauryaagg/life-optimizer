@@ -11,6 +11,7 @@ from life_optimizer.storage.repositories import (
     EventRepository,
     ScreenshotRepository,
     SessionRepository,
+    SummaryRepository,
 )
 
 
@@ -276,3 +277,190 @@ async def test_get_sessions_with_date_filter(session_repo: SessionRepository):
     # Filter by a date that won't match
     sessions_none = await session_repo.get_sessions(date="2020-01-01")
     assert len(sessions_none) == 0
+
+
+# --- EventRepository new methods ---
+
+
+async def test_update_event_category(repo: EventRepository):
+    """Test updating the category and subcategory of an event."""
+    result = _make_result(app_name="Code", window_title="main.py")
+    event_id = await repo.insert_event(result)
+
+    await repo.update_event_category(event_id, "Deep Work", "coding-python")
+
+    events = await repo.get_events()
+    assert len(events) == 1
+    assert events[0].category == "Deep Work"
+    assert events[0].subcategory == "coding-python"
+
+
+async def test_get_uncategorized_events(repo: EventRepository):
+    """Test retrieving uncategorized events."""
+    # Insert two events, categorize one
+    id1 = await repo.insert_event(_make_result(app_name="Code"))
+    id2 = await repo.insert_event(_make_result(app_name="Slack"))
+
+    await repo.update_event_category(id1, "Deep Work", "coding")
+
+    uncategorized = await repo.get_uncategorized_events()
+    assert len(uncategorized) == 1
+    assert uncategorized[0].app_name == "Slack"
+
+
+async def test_get_uncategorized_events_limit(repo: EventRepository):
+    """Test that limit works for uncategorized events."""
+    for i in range(5):
+        await repo.insert_event(_make_result(window_title=f"Win {i}"))
+
+    uncategorized = await repo.get_uncategorized_events(limit=2)
+    assert len(uncategorized) == 2
+
+
+async def test_get_events_between(repo: EventRepository):
+    """Test retrieving events within a time range."""
+    ts1 = datetime(2025, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
+    ts2 = datetime(2025, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+    ts3 = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+    await repo.insert_event(_make_result(timestamp=ts1, window_title="Morning"))
+    await repo.insert_event(_make_result(timestamp=ts2, window_title="Mid"))
+    await repo.insert_event(_make_result(timestamp=ts3, window_title="Afternoon"))
+
+    events = await repo.get_events_between(
+        "2025-01-15T10:00:00", "2025-01-15T11:00:00"
+    )
+    assert len(events) == 1
+    assert events[0].window_title == "Mid"
+
+
+async def test_get_events_between_inclusive(repo: EventRepository):
+    """Test that get_events_between is inclusive on both ends."""
+    ts = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+    await repo.insert_event(_make_result(timestamp=ts, window_title="Exact"))
+
+    events = await repo.get_events_between(
+        "2025-01-15T10:00:00", "2025-01-15T10:00:00+00:00"
+    )
+    assert len(events) == 1
+
+
+# --- SummaryRepository tests ---
+
+
+@pytest.fixture
+def summary_repo(db: Database):
+    return SummaryRepository(db)
+
+
+async def test_insert_and_get_summary(summary_repo: SummaryRepository):
+    """Test inserting and retrieving a summary."""
+    sid = await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-15T10:00:00",
+        period_end="2025-01-15T11:00:00",
+        summary_text="Mostly coding in VS Code.",
+        category_breakdown='{"Deep Work": 40}',
+        top_activities='[{"app": "Code", "minutes": 40}]',
+        model_used="test-model",
+    )
+    assert sid is not None
+    assert sid > 0
+
+    summaries = await summary_repo.get_summaries()
+    assert len(summaries) == 1
+    assert summaries[0].period_type == "hourly"
+    assert summaries[0].summary_text == "Mostly coding in VS Code."
+    assert summaries[0].model_used == "test-model"
+
+
+async def test_get_summaries_with_type_filter(summary_repo: SummaryRepository):
+    """Test filtering summaries by period type."""
+    await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-15T10:00:00",
+        period_end="2025-01-15T11:00:00",
+        summary_text="Hourly summary.",
+    )
+    await summary_repo.insert_summary(
+        period_type="daily",
+        period_start="2025-01-15T00:00:00",
+        period_end="2025-01-15T23:59:59",
+        summary_text="Daily summary.",
+    )
+
+    hourly = await summary_repo.get_summaries(period_type="hourly")
+    assert len(hourly) == 1
+    assert hourly[0].period_type == "hourly"
+
+    daily = await summary_repo.get_summaries(period_type="daily")
+    assert len(daily) == 1
+    assert daily[0].period_type == "daily"
+
+
+async def test_get_latest_summary(summary_repo: SummaryRepository):
+    """Test getting the most recent summary of a given type."""
+    await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-15T09:00:00",
+        period_end="2025-01-15T10:00:00",
+        summary_text="First.",
+    )
+    await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-15T10:00:00",
+        period_end="2025-01-15T11:00:00",
+        summary_text="Second.",
+    )
+
+    latest = await summary_repo.get_latest_summary("hourly")
+    assert latest is not None
+    assert latest.summary_text == "Second."
+
+
+async def test_get_latest_summary_none(summary_repo: SummaryRepository):
+    """Test get_latest_summary returns None when no summaries exist."""
+    latest = await summary_repo.get_latest_summary("hourly")
+    assert latest is None
+
+
+async def test_get_summary_by_id(summary_repo: SummaryRepository):
+    """Test getting a summary by its ID."""
+    sid = await summary_repo.insert_summary(
+        period_type="daily",
+        period_start="2025-01-15T00:00:00",
+        period_end="2025-01-15T23:59:59",
+        summary_text="Daily report.",
+        insights="Work more.",
+    )
+
+    summary = await summary_repo.get_summary_by_id(sid)
+    assert summary is not None
+    assert summary.summary_text == "Daily report."
+    assert summary.insights == "Work more."
+
+
+async def test_get_summary_by_id_not_found(summary_repo: SummaryRepository):
+    """Test get_summary_by_id returns None for nonexistent ID."""
+    summary = await summary_repo.get_summary_by_id(9999)
+    assert summary is None
+
+
+async def test_get_summaries_with_date_filter(summary_repo: SummaryRepository):
+    """Test filtering summaries by date."""
+    await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-15T10:00:00",
+        period_end="2025-01-15T11:00:00",
+        summary_text="Day 1.",
+    )
+    await summary_repo.insert_summary(
+        period_type="hourly",
+        period_start="2025-01-16T10:00:00",
+        period_end="2025-01-16T11:00:00",
+        summary_text="Day 2.",
+    )
+
+    day1 = await summary_repo.get_summaries(date="2025-01-15")
+    assert len(day1) == 1
+    assert day1[0].summary_text == "Day 1."

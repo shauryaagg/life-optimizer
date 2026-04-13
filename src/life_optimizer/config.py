@@ -41,11 +41,23 @@ class ScreenshotsConfig:
 
 
 @dataclass
+class LLMConfig:
+    provider: str = "claude"
+    claude_model: str = "claude-sonnet-4-20250514"
+    claude_api_key: str = ""
+    ollama_model: str = "llama3.1:8b"
+    ollama_base_url: str = "http://localhost:11434"
+    batch_interval: int = 3600
+    daily_insight_time: str = "22:00"
+
+
+@dataclass
 class Config:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     collectors: CollectorsConfig = field(default_factory=CollectorsConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     screenshots: ScreenshotsConfig = field(default_factory=ScreenshotsConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -93,5 +105,27 @@ def load_config(path: str = "config.yaml") -> Config:
             config.screenshots.capture_on_app_switch = bool(sc["capture_on_app_switch"])
         if "retention_days" in sc:
             config.screenshots.retention_days = int(sc["retention_days"])
+
+    if "llm" in raw:
+        llm = raw["llm"]
+        if "provider" in llm:
+            config.llm.provider = str(llm["provider"])
+        if "claude" in llm:
+            claude = llm["claude"]
+            if "model" in claude:
+                config.llm.claude_model = str(claude["model"])
+            if "api_key_env" in claude:
+                env_var = str(claude["api_key_env"])
+                config.llm.claude_api_key = os.environ.get(env_var, "")
+        if "ollama" in llm:
+            ollama = llm["ollama"]
+            if "model" in ollama:
+                config.llm.ollama_model = str(ollama["model"])
+            if "base_url" in ollama:
+                config.llm.ollama_base_url = str(ollama["base_url"])
+        if "batch_interval" in llm:
+            config.llm.batch_interval = int(llm["batch_interval"])
+        if "daily_insight_time" in llm:
+            config.llm.daily_insight_time = str(llm["daily_insight_time"])
 
     return config

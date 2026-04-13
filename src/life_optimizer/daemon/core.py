@@ -20,6 +20,8 @@ from life_optimizer.storage.repositories import (
     ScreenshotRepository,
     SessionRepository,
 )
+from life_optimizer.llm import create_llm_client
+from life_optimizer.llm.pipeline import LLMPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,9 @@ class Daemon:
         self._session_event_count: int = 0
         self._workspace_listener: object | None = None
         self._event_queue: asyncio.Queue | None = None
+        self._llm_pipeline: LLMPipeline | None = None
+        self._last_categorization: float = 0
+        self._last_daily_insight: str | None = None
 
     async def start(self) -> None:
         """Initialize all components and start the main polling loop."""
@@ -95,6 +100,16 @@ class Daemon:
         )
         self._screenshot_scheduler.enabled = sc_config.enabled
 
+        # Initialize LLM pipeline (optional)
+        try:
+            llm_client = create_llm_client(self._config)
+            self._llm_pipeline = LLMPipeline(llm_client, self._db)
+            llm_status = llm_client.name if llm_client else "none (rule-based only)"
+        except Exception as e:
+            logger.warning("Failed to initialize LLM pipeline: %s", e)
+            self._llm_pipeline = None
+            llm_status = "failed"
+
         self._running = True
 
         # Register signal handlers for graceful shutdown
@@ -130,6 +145,7 @@ class Daemon:
         print(f"Poll interval: {self._config.daemon.poll_interval}s")
         print(f"Screenshots: {'enabled' if sc_config.enabled else 'disabled'}")
         print(f"NSWorkspace listener: {workspace_status}")
+        print(f"LLM provider: {llm_status}")
         print("=" * 60)
 
         try:
@@ -137,6 +153,8 @@ class Daemon:
             tasks = [asyncio.create_task(self._main_loop())]
             if self._workspace_listener is not None and self._event_queue is not None:
                 tasks.append(asyncio.create_task(self._process_workspace_events()))
+            if self._llm_pipeline is not None:
+                tasks.append(asyncio.create_task(self._llm_periodic_loop()))
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
             pass
@@ -266,6 +284,39 @@ class Daemon:
                 logger.warning("Failed to end session: %s", e)
             self._current_session_id = None
             self._session_event_count = 0
+
+    async def _llm_periodic_loop(self) -> None:
+        """Periodically run LLM categorization and daily insights."""
+        import time
+
+        batch_interval = self._config.llm.batch_interval
+        daily_insight_time = self._config.llm.daily_insight_time
+
+        while self._running:
+            try:
+                now = time.time()
+
+                # Run categorization at batch_interval
+                if now - self._last_categorization >= batch_interval:
+                    await self._llm_pipeline.run_categorization()
+                    await self._llm_pipeline.run_hourly_summary()
+                    self._last_categorization = now
+
+                # Check for daily insight time
+                current_time = datetime.now().strftime("%H:%M")
+                today = datetime.now().strftime("%Y-%m-%d")
+                if (
+                    current_time >= daily_insight_time
+                    and self._last_daily_insight != today
+                ):
+                    await self._llm_pipeline.run_daily_insights(date=today)
+                    self._last_daily_insight = today
+
+            except Exception as e:
+                logger.error("Error in LLM periodic loop: %s", e, exc_info=True)
+
+            # Check every 60 seconds
+            await asyncio.sleep(60)
 
     async def _poll_once(self) -> None:
         """Execute a single poll cycle."""
