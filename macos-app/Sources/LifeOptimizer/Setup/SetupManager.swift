@@ -10,9 +10,8 @@ class SetupManager: ObservableObject {
     @Published var error: String?
     @AppStorage("setupComplete") var isSetupComplete: Bool = false
 
-    // Permissions — stored directly here so SwiftUI sees the changes
+    // Permissions
     @Published var accessibilityGranted: Bool = false
-    @Published var screenRecordingGranted: Bool = false
 
     enum SetupStep: Int, CaseIterable {
         case welcome
@@ -40,20 +39,15 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Check permissions and update published properties directly.
-    func checkPermissions() {
+    /// Check accessibility only — no side effects, no spawning processes.
+    func checkAccessibility() {
         accessibilityGranted = AXIsProcessTrusted()
-        screenRecordingGranted = checkScreenRecording()
     }
 
-    /// Prompt for Accessibility permission.
+    /// Prompt for Accessibility permission (one-shot, not in a loop).
     func requestAccessibility() {
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
-        // Re-check shortly after
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.checkPermissions()
-        }
     }
 
     /// Open Screen Recording settings.
@@ -63,7 +57,13 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Run Python setup.
+    /// Open Accessibility settings.
+    func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func setupPython() async {
         error = nil
         let projectDir = PythonDiscovery.projectDirectory()
@@ -80,7 +80,6 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Save API key to keychain.
     func saveAPIKey(_ key: String) {
         guard !key.isEmpty else { return }
         do {
@@ -101,23 +100,5 @@ class SetupManager: ObservableObject {
         progress = 0
         statusMessage = ""
         error = nil
-    }
-
-    // MARK: - Private
-
-    private func checkScreenRecording() -> Bool {
-        let testPath = "/tmp/.lo_test_screenshot.jpg"
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        task.arguments = ["-x", "-t", "jpg", testPath]
-        do {
-            try task.run()
-            task.waitUntilExit()
-        } catch {
-            return false
-        }
-        let exists = FileManager.default.fileExists(atPath: testPath)
-        try? FileManager.default.removeItem(atPath: testPath)
-        return exists && task.terminationStatus == 0
     }
 }
