@@ -10,7 +10,9 @@ class SetupManager: ObservableObject {
     @Published var error: String?
     @AppStorage("setupComplete") var isSetupComplete: Bool = false
 
-    let permissionManager = PermissionManager()
+    // Permissions — stored directly here so SwiftUI sees the changes
+    @Published var accessibilityGranted: Bool = false
+    @Published var screenRecordingGranted: Bool = false
 
     enum SetupStep: Int, CaseIterable {
         case welcome
@@ -20,7 +22,6 @@ class SetupManager: ObservableObject {
         case complete
     }
 
-    /// Move to the next step.
     func nextStep() {
         let allSteps = SetupStep.allCases
         if let currentIndex = allSteps.firstIndex(of: step),
@@ -30,7 +31,6 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Move to the previous step.
     func previousStep() {
         let allSteps = SetupStep.allCases
         if let currentIndex = allSteps.firstIndex(of: step),
@@ -40,22 +40,30 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Check current permission status.
+    /// Check permissions and update published properties directly.
     func checkPermissions() {
-        permissionManager.checkAll()
+        accessibilityGranted = AXIsProcessTrusted()
+        screenRecordingGranted = checkScreenRecording()
     }
 
-    /// Request accessibility permission.
+    /// Prompt for Accessibility permission.
     func requestAccessibility() {
-        permissionManager.requestAccessibility()
+        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        // Re-check shortly after
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.checkPermissions()
+        }
     }
 
-    /// Open screen recording settings.
+    /// Open Screen Recording settings.
     func openScreenRecordingSettings() {
-        permissionManager.openScreenRecordingSettings()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
-    /// Run Python setup — auto-detects project path.
+    /// Run Python setup.
     func setupPython() async {
         error = nil
         let projectDir = PythonDiscovery.projectDirectory()
@@ -82,18 +90,34 @@ class SetupManager: ObservableObject {
         }
     }
 
-    /// Complete setup and mark as done.
     func completeSetup() {
         isSetupComplete = true
         step = .complete
     }
 
-    /// Reset setup state (for re-running setup).
     func resetSetup() {
         isSetupComplete = false
         step = .welcome
         progress = 0
         statusMessage = ""
         error = nil
+    }
+
+    // MARK: - Private
+
+    private func checkScreenRecording() -> Bool {
+        let testPath = "/tmp/.lo_test_screenshot.jpg"
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        task.arguments = ["-x", "-t", "jpg", testPath]
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return false
+        }
+        let exists = FileManager.default.fileExists(atPath: testPath)
+        try? FileManager.default.removeItem(atPath: testPath)
+        return exists && task.terminationStatus == 0
     }
 }

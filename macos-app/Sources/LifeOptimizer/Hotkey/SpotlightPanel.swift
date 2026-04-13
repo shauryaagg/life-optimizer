@@ -11,7 +11,7 @@ class SpotlightPanel: NSPanel {
 
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
-            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView, .hudWindow],
+            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView, .utilityWindow, .hudWindow],
             backing: .buffered,
             defer: false
         )

@@ -99,24 +99,18 @@ struct PermissionsStepView: View {
                 PermissionRow(
                     title: "Accessibility",
                     description: "Track which app is active and enable the Cmd+Shift+Space hotkey",
-                    isGranted: setupManager.permissionManager.accessibilityGranted,
+                    isGranted: setupManager.accessibilityGranted,
                     action: { setupManager.requestAccessibility() }
                 )
 
                 PermissionRow(
                     title: "Screen Recording",
                     description: "Capture smart screenshots for context",
-                    isGranted: setupManager.permissionManager.screenRecordingGranted,
+                    isGranted: setupManager.screenRecordingGranted,
                     action: { setupManager.openScreenRecordingSettings() }
                 )
             }
             .padding(.horizontal, 24)
-
-            if setupManager.permissionManager.accessibilityGranted {
-                Text("Accessibility granted!")
-                    .font(.caption)
-                    .foregroundColor(.green)
-            }
 
             Spacer()
 
@@ -126,17 +120,19 @@ struct PermissionsStepView: View {
                 Spacer()
                 Button("Continue") { setupManager.nextStep() }
                     .buttonStyle(.borderedProminent)
-                    // Allow continuing even without Screen Recording — it's optional
-                    .disabled(!setupManager.permissionManager.accessibilityGranted)
+                    // Accessibility is required; Screen Recording is optional
+                    .disabled(!setupManager.accessibilityGranted)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
         .onAppear {
             setupManager.checkPermissions()
-            // Poll every 2 seconds to detect permission grants
-            pollingTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-                setupManager.checkPermissions()
+            // Poll every 2 seconds on main thread to detect grants
+            pollingTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak setupManager] _ in
+                Task { @MainActor in
+                    setupManager?.checkPermissions()
+                }
             }
         }
         .onDisappear {

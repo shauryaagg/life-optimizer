@@ -15,9 +15,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var setupWindowController: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Menubar-only app (no dock icon)
-        NSApp.setActivationPolicy(.accessory)
-
         // Create spotlight panel (hidden initially)
         spotlightPanel = SpotlightPanel(chatViewModel: chatViewModel)
 
@@ -28,10 +25,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Decide: show onboarding or start daemon
         if setupManager.isSetupComplete {
-            // Setup was done before — just start the daemon
+            // Setup done — menubar-only mode, start daemon
+            NSApp.setActivationPolicy(.accessory)
             daemonManager.startAll()
         } else {
-            // First launch — show the onboarding window immediately
+            // First launch — regular app mode so setup window stays in front
+            NSApp.setActivationPolicy(.regular)
             showSetupWindow()
         }
     }
@@ -62,9 +61,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         window.isReleasedWhenClosed = false
 
         let setupView = SetupView(setupManager: setupManager) { [weak self] in
-            // Called when setup is complete
+            // Called when setup is complete — switch to menubar-only mode
             self?.setupWindowController?.close()
             self?.setupWindowController = nil
+            NSApp.setActivationPolicy(.accessory)
             self?.daemonManager.startAll()
         }
         window.contentView = NSHostingView(rootView: setupView)
