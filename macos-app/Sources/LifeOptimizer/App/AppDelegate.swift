@@ -25,11 +25,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Decide: show onboarding or start daemon
         if setupManager.isSetupComplete {
-            // Setup done — menubar-only mode, start daemon
             NSApp.setActivationPolicy(.accessory)
             daemonManager.startAll()
         } else {
-            // First launch — regular app mode so setup window stays in front
             NSApp.setActivationPolicy(.regular)
             showSetupWindow()
         }

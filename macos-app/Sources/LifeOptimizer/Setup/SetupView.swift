@@ -181,17 +181,15 @@ struct PermissionsStepView: View {
 
                 Button("Continue") { setupManager.nextStep() }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!setupManager.accessibilityGranted)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
         .onAppear {
             setupManager.checkAccessibility()
-            // Light polling — just reads AXIsProcessTrusted(), no side effects
-            pollingTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+            pollingTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak setupManager] _ in
                 Task { @MainActor in
-                    setupManager.checkAccessibility()
+                    setupManager?.checkAccessibility()
                 }
             }
         }
