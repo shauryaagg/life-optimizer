@@ -27,6 +27,38 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_app ON events(app_name, timestamp);
+
+CREATE TABLE IF NOT EXISTS screenshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    app_name TEXT NOT NULL,
+    window_title TEXT,
+    file_size_bytes INTEGER,
+    width INTEGER,
+    height INTEGER,
+    trigger_reason TEXT,
+    llm_description TEXT,
+    event_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time TEXT NOT NULL,
+    end_time TEXT,
+    app_name TEXT NOT NULL,
+    app_bundle_id TEXT,
+    title_summary TEXT,
+    context_summary TEXT,
+    duration_seconds REAL,
+    category TEXT,
+    subcategory TEXT,
+    event_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_time ON sessions(start_time, end_time);
 """
 
 

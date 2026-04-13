@@ -5,7 +5,21 @@ daemon:
 collectors:
   enabled:
     - chrome
+    - safari
+    - slack
+    - terminal
+    - vscode
+    - calendar
+    - finder
     - generic
 
 storage:
   db_path: ./data/life_optimizer.db
+
+screenshots:
+  enabled: true
+  interval: 30
+  quality: 60
+  scale: 0.5
+  capture_on_app_switch: true
+  retention_days: 30

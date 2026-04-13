@@ -12,8 +12,14 @@ from life_optimizer.collectors.jxa_bridge import JXABridge
 from life_optimizer.collectors.registry import CollectorRegistry
 from life_optimizer.config import Config
 from life_optimizer.constants import APP_ACTIVATE
+from life_optimizer.screenshots.capture import ScreenshotCapture
+from life_optimizer.screenshots.scheduler import ScreenshotScheduler
 from life_optimizer.storage.database import Database
-from life_optimizer.storage.repositories import EventRepository
+from life_optimizer.storage.repositories import (
+    EventRepository,
+    ScreenshotRepository,
+    SessionRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +43,12 @@ class Daemon:
         self._jxa_bridge = JXABridge()
         self._db: Database | None = None
         self._repo: EventRepository | None = None
+        self._screenshot_repo: ScreenshotRepository | None = None
+        self._session_repo: SessionRepository | None = None
         self._registry: CollectorRegistry | None = None
+        self._screenshot_scheduler: ScreenshotScheduler | None = None
+        self._current_session_id: int | None = None
+        self._session_event_count: int = 0
 
     async def start(self) -> None:
         """Initialize all components and start the main polling loop."""
@@ -54,11 +65,25 @@ class Daemon:
         self._db = Database(self._config.storage.db_path)
         await self._db.initialize()
         self._repo = EventRepository(self._db)
+        self._screenshot_repo = ScreenshotRepository(self._db)
+        self._session_repo = SessionRepository(self._db)
 
         # Initialize collector registry
         self._registry = CollectorRegistry.setup(
             enabled=self._config.collectors.enabled
         )
+
+        # Initialize screenshot scheduler
+        sc_config = self._config.screenshots
+        capture = ScreenshotCapture(
+            quality=sc_config.quality,
+            scale=sc_config.scale,
+        )
+        self._screenshot_scheduler = ScreenshotScheduler(
+            capture=capture,
+            interval=sc_config.interval,
+        )
+        self._screenshot_scheduler.enabled = sc_config.enabled
 
         self._running = True
 
@@ -72,6 +97,7 @@ class Daemon:
         print("Life Optimizer — Activity Monitor")
         print(f"Database: {self._config.storage.db_path}")
         print(f"Poll interval: {self._config.daemon.poll_interval}s")
+        print(f"Screenshots: {'enabled' if sc_config.enabled else 'disabled'}")
         print("=" * 60)
 
         try:
@@ -88,6 +114,9 @@ class Daemon:
 
     async def _cleanup(self) -> None:
         """Clean up resources on shutdown."""
+        # End any active session
+        await self._end_current_session()
+
         if self._repo is not None and self._db is not None:
             try:
                 count = await self._repo.get_event_count()
@@ -108,6 +137,21 @@ class Daemon:
 
             await asyncio.sleep(self._config.daemon.poll_interval)
 
+    async def _end_current_session(self) -> None:
+        """End the current session if one is active."""
+        if self._current_session_id is not None and self._session_repo is not None:
+            try:
+                end_time = datetime.now(timezone.utc).isoformat()
+                await self._session_repo.end_session(
+                    self._current_session_id,
+                    end_time,
+                    self._session_event_count,
+                )
+            except Exception as e:
+                logger.warning("Failed to end session: %s", e)
+            self._current_session_id = None
+            self._session_event_count = 0
+
     async def _poll_once(self) -> None:
         """Execute a single poll cycle."""
         # Detect frontmost app
@@ -121,6 +165,28 @@ class Daemon:
         app_changed = app_name != self._previous_app
         if app_changed:
             self._previous_result = None  # Reset dedup on app change
+
+            # End previous session and start new one
+            await self._end_current_session()
+            if self._session_repo is not None:
+                self._current_session_id = await self._session_repo.start_session(
+                    app_name, bundle_id
+                )
+
+            # Screenshot on app switch
+            if (
+                self._screenshot_scheduler is not None
+                and self._config.screenshots.capture_on_app_switch
+            ):
+                ss_result = await self._screenshot_scheduler.on_app_switch(app_name)
+                if ss_result is not None and self._screenshot_repo is not None:
+                    await self._screenshot_repo.insert_screenshot(ss_result)
+
+        # Periodic screenshot tick
+        if self._screenshot_scheduler is not None:
+            ss_result = await self._screenshot_scheduler.tick(app_name)
+            if ss_result is not None and self._screenshot_repo is not None:
+                await self._screenshot_repo.insert_screenshot(ss_result)
 
         # Get the appropriate collector
         collector = self._registry.get_collector(app_name)
@@ -140,6 +206,7 @@ class Daemon:
 
         # Store the event
         event_id = await self._repo.insert_event(result)
+        self._session_event_count += 1
 
         # Print for debugging
         context_str = ""

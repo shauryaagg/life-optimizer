@@ -5,9 +5,15 @@ from __future__ import annotations
 import logging
 
 from life_optimizer.collectors.base import BaseCollector
+from life_optimizer.collectors.calendar_app import CalendarCollector
 from life_optimizer.collectors.chrome import ChromeCollector
+from life_optimizer.collectors.finder import FinderCollector
 from life_optimizer.collectors.generic import GenericCollector
 from life_optimizer.collectors.jxa_bridge import JXABridge
+from life_optimizer.collectors.safari import SafariCollector
+from life_optimizer.collectors.slack import SlackCollector
+from life_optimizer.collectors.terminal import TerminalCollector
+from life_optimizer.collectors.vscode import VSCodeCollector
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +58,42 @@ class CollectorRegistry:
             Configured CollectorRegistry instance.
         """
         if enabled is None:
-            enabled = ["chrome", "generic"]
+            enabled = [
+                "chrome", "safari", "slack", "terminal",
+                "vscode", "calendar", "finder", "generic",
+            ]
 
         jxa_bridge = JXABridge()
         generic = GenericCollector(jxa_bridge)
         registry = cls(default=generic, jxa_bridge=jxa_bridge)
 
         if "chrome" in enabled:
-            chrome = ChromeCollector(jxa_bridge)
-            registry.register(chrome)
+            registry.register(ChromeCollector(jxa_bridge))
             logger.info("Chrome collector enabled")
+
+        if "safari" in enabled:
+            registry.register(SafariCollector(jxa_bridge))
+            logger.info("Safari collector enabled")
+
+        if "slack" in enabled:
+            registry.register(SlackCollector(jxa_bridge))
+            logger.info("Slack collector enabled")
+
+        if "terminal" in enabled:
+            registry.register(TerminalCollector(jxa_bridge))
+            logger.info("Terminal collector enabled")
+
+        if "vscode" in enabled:
+            registry.register(VSCodeCollector(jxa_bridge))
+            logger.info("VSCode/Cursor collector enabled")
+
+        if "calendar" in enabled:
+            registry.register(CalendarCollector(jxa_bridge))
+            logger.info("Calendar collector enabled")
+
+        if "finder" in enabled:
+            registry.register(FinderCollector(jxa_bridge))
+            logger.info("Finder collector enabled")
 
         logger.info(
             "Registry setup complete: %d app-specific collectors, generic fallback",
