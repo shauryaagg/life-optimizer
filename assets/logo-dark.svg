@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" fill="none">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a78bfa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c4b5fd;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#a78bfa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e9d5ff;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="100" cy="100" r="72" stroke="url(#ring)" stroke-width="5" fill="none" opacity="0.25"/>
+  <circle cx="100" cy="100" r="52" stroke="url(#ring)" stroke-width="5" fill="none" opacity="0.5"/>
+  <circle cx="100" cy="100" r="32" fill="url(#grad1)"/>
+  <circle cx="100" cy="100" r="12" fill="#0f0a2a"/>
+
+  <rect x="96" y="16" width="8" height="20" rx="4" fill="url(#grad2)" opacity="0.7"/>
+  <rect x="96" y="164" width="8" height="20" rx="4" fill="url(#grad2)" opacity="0.7"/>
+  <rect x="16" y="96" width="20" height="8" rx="4" fill="url(#grad2)" opacity="0.7"/>
+  <rect x="164" y="96" width="20" height="8" rx="4" fill="url(#grad2)" opacity="0.7"/>
+
+  <rect x="40" y="37" width="8" height="18" rx="4" fill="url(#grad2)" opacity="0.4" transform="rotate(45 44 46)"/>
+  <rect x="152" y="37" width="8" height="18" rx="4" fill="url(#grad2)" opacity="0.4" transform="rotate(-45 156 46)"/>
+  <rect x="40" y="145" width="8" height="18" rx="4" fill="url(#grad2)" opacity="0.4" transform="rotate(-45 44 154)"/>
+  <rect x="152" y="145" width="8" height="18" rx="4" fill="url(#grad2)" opacity="0.4" transform="rotate(45 156 154)"/>
+
+  <text x="210" y="88" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="56" font-weight="700" fill="#f5f3ff" letter-spacing="-1.5">
+    Life Optimizer
+  </text>
+
+  <text x="212" y="130" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Helvetica, Arial, sans-serif" font-size="20" font-weight="400" fill="#9ca3af" letter-spacing="0.5">
+    Know yourself. Optimize everything.
+  </text>
+</svg>

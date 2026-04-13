@@ -6,3 +6,6 @@ dist/
 build/
 *.egg-info
 .venv/
+.pytest_cache/
+macos-app/.build/
+.DS_Store
