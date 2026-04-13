@@ -74,6 +74,7 @@ def create_app(config: Config) -> FastAPI:
 
     # Include route modules
     from life_optimizer.dashboard.routes.api import router as api_router
+    from life_optimizer.dashboard.routes.chat import router as chat_router
     from life_optimizer.dashboard.routes.reports import router as reports_router
     from life_optimizer.dashboard.routes.screenshots import router as screenshots_router
     from life_optimizer.dashboard.routes.settings import router as settings_router
@@ -84,5 +85,28 @@ def create_app(config: Config) -> FastAPI:
     app.include_router(screenshots_router)
     app.include_router(settings_router)
     app.include_router(api_router)
+    app.include_router(chat_router)
+
+    # Initialize query engine (best effort)
+    try:
+        from life_optimizer.llm import create_llm_client
+        from life_optimizer.query.engine import QueryEngine
+        from life_optimizer.query.semantic_search import SemanticSearch, CHROMADB_AVAILABLE
+
+        llm_client = create_llm_client(config)
+        semantic = None
+        if CHROMADB_AVAILABLE:
+            chromadb_dir = getattr(
+                getattr(config, "query", None), "chromadb_dir", "data/chromadb"
+            )
+            semantic = SemanticSearch(persist_dir=chromadb_dir)
+        app.state.query_engine = QueryEngine(
+            db=db, llm_client=llm_client, semantic_search=semantic
+        )
+        app.state.semantic_search = semantic
+    except Exception as exc:
+        logger.warning("Could not initialize query engine: %s", exc)
+        app.state.query_engine = None
+        app.state.semantic_search = None
 
     return app

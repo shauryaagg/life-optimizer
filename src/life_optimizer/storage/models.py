@@ -8,7 +8,15 @@ from datetime import datetime
 # Re-export CollectorResult for convenience
 from life_optimizer.collectors.base import CollectorResult
 
-__all__ = ["CollectorResult", "ActivityEvent", "Screenshot", "Session", "Summary"]
+__all__ = [
+    "CollectorResult",
+    "ActivityEvent",
+    "Screenshot",
+    "Session",
+    "Summary",
+    "Entity",
+    "EntityMention",
+]
 
 
 @dataclass
@@ -78,4 +86,31 @@ class Summary:
     top_activities: str | None = None
     insights: str | None = None
     model_used: str | None = None
+    created_at: str = ""
+
+
+@dataclass
+class Entity:
+    """Represents a tracked entity (person, project, etc.) from the entities table."""
+
+    id: int
+    entity_type: str
+    name: str
+    first_seen: str
+    last_seen: str
+    interaction_count: int = 0
+    metadata_json: str | None = None
+    created_at: str = ""
+
+
+@dataclass
+class EntityMention:
+    """Represents an entity mention from the entity_mentions table."""
+
+    id: int
+    entity_id: int
+    event_id: int | None = None
+    mention_type: str | None = None
+    timestamp: str = ""
+    context: str | None = None
     created_at: str = ""

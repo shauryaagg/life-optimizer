@@ -73,6 +73,50 @@ CREATE TABLE IF NOT EXISTS summaries (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_summaries_period ON summaries(period_type, period_start);
+
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    interaction_count INTEGER DEFAULT 0,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(entity_type, name)
+);
+CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, name);
+
+CREATE TABLE IF NOT EXISTS entity_mentions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id INTEGER NOT NULL REFERENCES entities(id),
+    event_id INTEGER REFERENCES events(id),
+    mention_type TEXT,
+    timestamp TEXT NOT NULL,
+    context TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_entity_mentions_entity ON entity_mentions(entity_id, timestamp);
+
+CREATE TABLE IF NOT EXISTS chat_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    query_type TEXT,
+    sql_query TEXT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id, timestamp);
+
+CREATE TABLE IF NOT EXISTS archived_events (
+    id INTEGER PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    app_name TEXT NOT NULL,
+    category TEXT,
+    duration_seconds REAL,
+    created_at TEXT NOT NULL
+);
 """
 
 

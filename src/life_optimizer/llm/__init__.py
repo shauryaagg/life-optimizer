@@ -1,7 +1,7 @@
 """LLM integration for activity categorization, summaries, and insights."""
 
 from .base import BaseLLMClient
-from .claude_client import ClaudeClient
+from .claude_client import ClaudeClient, ClaudeCodeClient
 from .ollama_client import OllamaClient
 
 
@@ -23,6 +23,10 @@ def create_llm_client(config) -> BaseLLMClient | None:
             model=config.llm.claude_model,
             api_key=config.llm.claude_api_key,
         )
+    elif provider == "claude-code":
+        return ClaudeCodeClient(
+            model=config.llm.claude_model,
+        )
     elif provider == "ollama":
         return OllamaClient(
             model=config.llm.ollama_model,
@@ -37,6 +41,7 @@ def create_llm_client(config) -> BaseLLMClient | None:
 __all__ = [
     "BaseLLMClient",
     "ClaudeClient",
+    "ClaudeCodeClient",
     "OllamaClient",
     "create_llm_client",
 ]

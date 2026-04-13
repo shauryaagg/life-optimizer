@@ -9,7 +9,14 @@ from datetime import datetime, timezone
 from life_optimizer.collectors.base import CollectorResult
 from life_optimizer.screenshots.capture import ScreenshotResult
 from life_optimizer.storage.database import Database
-from life_optimizer.storage.models import ActivityEvent, Screenshot, Session, Summary
+from life_optimizer.storage.models import (
+    ActivityEvent,
+    Entity,
+    EntityMention,
+    Screenshot,
+    Session,
+    Summary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -649,3 +656,258 @@ class SummaryRepository:
             model_used=row[8],
             created_at=row[9] or "",
         )
+
+
+class EntityRepository:
+    """Repository for entity CRUD operations."""
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    async def upsert_entity(
+        self,
+        entity_type: str,
+        name: str,
+        timestamp: str,
+        metadata: dict | None = None,
+    ) -> int:
+        """Insert or update an entity, returning its ID.
+
+        If the entity already exists (same type + name), update last_seen
+        and increment interaction_count.
+
+        Args:
+            entity_type: Type of entity (e.g. "person", "project").
+            name: Entity name.
+            timestamp: ISO format timestamp of the interaction.
+            metadata: Optional metadata dict.
+
+        Returns:
+            The entity ID.
+        """
+        conn = self._db.connection
+        metadata_json = json.dumps(metadata) if metadata else None
+
+        # Try to find existing entity
+        cursor = await conn.execute(
+            "SELECT id, interaction_count FROM entities WHERE entity_type = ? AND name = ?",
+            (entity_type, name),
+        )
+        row = await cursor.fetchone()
+
+        if row:
+            entity_id = row[0]
+            count = row[1] or 0
+            await conn.execute(
+                """
+                UPDATE entities SET last_seen = ?, interaction_count = ?,
+                       metadata_json = COALESCE(?, metadata_json)
+                WHERE id = ?
+                """,
+                (timestamp, count + 1, metadata_json, entity_id),
+            )
+            await conn.commit()
+            return entity_id
+        else:
+            cursor = await conn.execute(
+                """
+                INSERT INTO entities (entity_type, name, first_seen, last_seen,
+                                      interaction_count, metadata_json)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (entity_type, name, timestamp, timestamp, metadata_json),
+            )
+            await conn.commit()
+            return cursor.lastrowid
+
+    async def add_mention(
+        self,
+        entity_id: int,
+        event_id: int | None,
+        mention_type: str,
+        timestamp: str,
+        context: str | None = None,
+    ) -> int:
+        """Add an entity mention.
+
+        Args:
+            entity_id: ID of the entity.
+            event_id: ID of the related event (optional).
+            mention_type: Type of mention (e.g. "slack_dm", "editor").
+            timestamp: ISO format timestamp.
+            context: Optional context text.
+
+        Returns:
+            The mention ID.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            INSERT INTO entity_mentions (entity_id, event_id, mention_type,
+                                         timestamp, context)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (entity_id, event_id, mention_type, timestamp, context),
+        )
+        await conn.commit()
+        return cursor.lastrowid
+
+    async def get_entities(
+        self, entity_type: str | None = None, limit: int = 100
+    ) -> list[Entity]:
+        """Retrieve entities with optional type filtering.
+
+        Args:
+            entity_type: Filter by entity type.
+            limit: Maximum number of entities to return.
+
+        Returns:
+            List of Entity instances.
+        """
+        conn = self._db.connection
+        conditions = []
+        params: list = []
+
+        if entity_type:
+            conditions.append("entity_type = ?")
+            params.append(entity_type)
+
+        where = ""
+        if conditions:
+            where = "WHERE " + " AND ".join(conditions)
+
+        query = f"""
+            SELECT id, entity_type, name, first_seen, last_seen,
+                   interaction_count, metadata_json, created_at
+            FROM entities
+            {where}
+            ORDER BY last_seen DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+
+        return [
+            Entity(
+                id=row[0],
+                entity_type=row[1],
+                name=row[2],
+                first_seen=row[3],
+                last_seen=row[4],
+                interaction_count=row[5] or 0,
+                metadata_json=row[6],
+                created_at=row[7] or "",
+            )
+            for row in rows
+        ]
+
+    async def get_mentions(
+        self, entity_id: int, limit: int = 100
+    ) -> list[EntityMention]:
+        """Retrieve mentions for an entity.
+
+        Args:
+            entity_id: ID of the entity.
+            limit: Maximum number of mentions to return.
+
+        Returns:
+            List of EntityMention instances.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            SELECT id, entity_id, event_id, mention_type, timestamp,
+                   context, created_at
+            FROM entity_mentions
+            WHERE entity_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (entity_id, limit),
+        )
+        rows = await cursor.fetchall()
+
+        return [
+            EntityMention(
+                id=row[0],
+                entity_id=row[1],
+                event_id=row[2],
+                mention_type=row[3],
+                timestamp=row[4] or "",
+                context=row[5],
+                created_at=row[6] or "",
+            )
+            for row in rows
+        ]
+
+
+class ChatHistoryRepository:
+    """Repository for chat history operations."""
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    async def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        query_type: str | None = None,
+        sql_query: str | None = None,
+    ) -> int:
+        """Add a chat message to history.
+
+        Args:
+            session_id: Chat session identifier.
+            role: Message role ("user" or "assistant").
+            content: Message content.
+            query_type: Optional query classification.
+            sql_query: Optional generated SQL query.
+
+        Returns:
+            The message ID.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            INSERT INTO chat_history (session_id, role, content, query_type, sql_query)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, role, content, query_type, sql_query),
+        )
+        await conn.commit()
+        return cursor.lastrowid
+
+    async def get_history(self, session_id: str) -> list[dict]:
+        """Retrieve chat history for a session.
+
+        Args:
+            session_id: Chat session identifier.
+
+        Returns:
+            List of message dicts with role, content, query_type, sql_query, timestamp.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            SELECT role, content, query_type, sql_query, timestamp
+            FROM chat_history
+            WHERE session_id = ?
+            ORDER BY timestamp ASC
+            """,
+            (session_id,),
+        )
+        rows = await cursor.fetchall()
+
+        return [
+            {
+                "role": row[0],
+                "content": row[1],
+                "query_type": row[2],
+                "sql_query": row[3],
+                "timestamp": row[4],
+            }
+            for row in rows
+        ]

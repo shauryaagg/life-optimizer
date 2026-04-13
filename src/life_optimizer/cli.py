@@ -28,6 +28,7 @@ def main():
     subparsers.add_parser("uninstall", help="Remove launchd agent")
     subparsers.add_parser("stop", help="Stop the launchd daemon")
     subparsers.add_parser("dashboard", help="Start the web dashboard")
+    subparsers.add_parser("reindex", help="Reindex all summaries and events into ChromaDB")
 
     args = parser.parse_args()
 
@@ -45,6 +46,8 @@ def main():
         cmd_stop()
     elif args.command == "dashboard":
         cmd_dashboard()
+    elif args.command == "reindex":
+        asyncio.run(cmd_reindex())
 
 
 def cmd_start():
@@ -213,3 +216,27 @@ def cmd_dashboard():
     print(f"Starting dashboard at http://{host}:{port}")
     webbrowser.open(f"http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+async def cmd_reindex():
+    """Reindex all summaries and events into ChromaDB."""
+    from life_optimizer.config import load_config
+    from life_optimizer.query.semantic_search import CHROMADB_AVAILABLE, SemanticSearch
+    from life_optimizer.storage.database import Database
+
+    if not CHROMADB_AVAILABLE:
+        print("Error: chromadb is not installed. Run: pip install chromadb")
+        sys.exit(1)
+
+    config = load_config()
+    db = Database(config.storage.db_path)
+    await db.initialize()
+
+    try:
+        chromadb_dir = config.query.chromadb_dir
+        search = SemanticSearch(persist_dir=chromadb_dir)
+        print(f"Reindexing into {chromadb_dir}...")
+        count = await search.reindex_all(db)
+        print(f"Indexed {count} documents.")
+    finally:
+        await db.close()

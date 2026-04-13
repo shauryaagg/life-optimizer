@@ -69,6 +69,20 @@ class DashboardConfig:
 
 
 @dataclass
+class QueryConfig:
+    chromadb_dir: str = "data/chromadb"
+    max_sql_results: int = 1000
+    sql_timeout_seconds: int = 5
+
+
+@dataclass
+class MemoryConfig:
+    archive_after_days: int = 14
+    delete_after_days: int = 90
+    compression_enabled: bool = True
+
+
+@dataclass
 class Config:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     collectors: CollectorsConfig = field(default_factory=CollectorsConfig)
@@ -78,6 +92,8 @@ class Config:
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     messages: MessagesConfig = field(default_factory=MessagesConfig)
     chrome_extension: ChromeExtensionConfig = field(default_factory=ChromeExtensionConfig)
+    query: QueryConfig = field(default_factory=QueryConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -166,5 +182,23 @@ def load_config(path: str = "config.yaml") -> Config:
         ce = raw["chrome_extension"]
         if "enabled" in ce:
             config.chrome_extension.enabled = bool(ce["enabled"])
+
+    if "query" in raw:
+        q = raw["query"]
+        if "chromadb_dir" in q:
+            config.query.chromadb_dir = str(q["chromadb_dir"])
+        if "max_sql_results" in q:
+            config.query.max_sql_results = int(q["max_sql_results"])
+        if "sql_timeout_seconds" in q:
+            config.query.sql_timeout_seconds = int(q["sql_timeout_seconds"])
+
+    if "memory" in raw:
+        m = raw["memory"]
+        if "archive_after_days" in m:
+            config.memory.archive_after_days = int(m["archive_after_days"])
+        if "delete_after_days" in m:
+            config.memory.delete_after_days = int(m["delete_after_days"])
+        if "compression_enabled" in m:
+            config.memory.compression_enabled = bool(m["compression_enabled"])
 
     return config

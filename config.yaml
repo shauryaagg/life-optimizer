@@ -46,3 +46,13 @@ llm:
 dashboard:
   host: 127.0.0.1
   port: 8765
+
+query:
+  chromadb_dir: ./data/chromadb
+  max_sql_results: 1000
+  sql_timeout_seconds: 5
+
+memory:
+  archive_after_days: 14
+  delete_after_days: 90
+  compression_enabled: true

@@ -464,3 +464,134 @@ async def test_get_summaries_with_date_filter(summary_repo: SummaryRepository):
     day1 = await summary_repo.get_summaries(date="2025-01-15")
     assert len(day1) == 1
     assert day1[0].summary_text == "Day 1."
+
+
+# --- EntityRepository tests ---
+
+
+from life_optimizer.storage.repositories import EntityRepository, ChatHistoryRepository
+
+
+@pytest.fixture
+def entity_repo(db: Database):
+    return EntityRepository(db)
+
+
+async def test_entity_upsert_and_get(entity_repo: EntityRepository):
+    """Test upserting and retrieving entities."""
+    entity_id = await entity_repo.upsert_entity(
+        entity_type="person",
+        name="John Smith",
+        timestamp="2025-01-15T10:00:00",
+    )
+    assert entity_id is not None
+    assert entity_id > 0
+
+    entities = await entity_repo.get_entities(entity_type="person")
+    assert len(entities) == 1
+    assert entities[0].name == "John Smith"
+    assert entities[0].entity_type == "person"
+    assert entities[0].interaction_count == 1
+    assert entities[0].first_seen == "2025-01-15T10:00:00"
+
+
+async def test_entity_upsert_increments_count(entity_repo: EntityRepository):
+    """Test that upserting same entity increments interaction count."""
+    await entity_repo.upsert_entity("person", "Jane", "2025-01-15T10:00:00")
+    await entity_repo.upsert_entity("person", "Jane", "2025-01-15T11:00:00")
+
+    entities = await entity_repo.get_entities(entity_type="person")
+    assert len(entities) == 1
+    assert entities[0].interaction_count == 2
+    assert entities[0].last_seen == "2025-01-15T11:00:00"
+
+
+async def test_entity_add_mention_and_get(entity_repo: EntityRepository):
+    """Test adding and retrieving entity mentions."""
+    entity_id = await entity_repo.upsert_entity(
+        "person", "Alice", "2025-01-15T10:00:00"
+    )
+
+    mention_id = await entity_repo.add_mention(
+        entity_id=entity_id,
+        event_id=1,
+        mention_type="slack_dm",
+        timestamp="2025-01-15T10:00:00",
+        context="Slack DM",
+    )
+    assert mention_id is not None
+    assert mention_id > 0
+
+    mentions = await entity_repo.get_mentions(entity_id)
+    assert len(mentions) == 1
+    assert mentions[0].mention_type == "slack_dm"
+    assert mentions[0].context == "Slack DM"
+
+
+async def test_entity_get_all_types(entity_repo: EntityRepository):
+    """Test getting entities of all types."""
+    await entity_repo.upsert_entity("person", "Bob", "2025-01-15T10:00:00")
+    await entity_repo.upsert_entity("project", "my-project", "2025-01-15T10:00:00")
+
+    all_entities = await entity_repo.get_entities()
+    assert len(all_entities) == 2
+
+    people = await entity_repo.get_entities(entity_type="person")
+    assert len(people) == 1
+    assert people[0].name == "Bob"
+
+    projects = await entity_repo.get_entities(entity_type="project")
+    assert len(projects) == 1
+    assert projects[0].name == "my-project"
+
+
+# --- ChatHistoryRepository tests ---
+
+
+@pytest.fixture
+def chat_repo(db: Database):
+    return ChatHistoryRepository(db)
+
+
+async def test_chat_add_and_get_history(chat_repo: ChatHistoryRepository):
+    """Test adding messages and retrieving chat history."""
+    await chat_repo.add_message(
+        session_id="session-1",
+        role="user",
+        content="hello",
+    )
+    await chat_repo.add_message(
+        session_id="session-1",
+        role="assistant",
+        content="Hi there!",
+        query_type="insight",
+        sql_query=None,
+    )
+
+    history = await chat_repo.get_history("session-1")
+    assert len(history) == 2
+    assert history[0]["role"] == "user"
+    assert history[0]["content"] == "hello"
+    assert history[1]["role"] == "assistant"
+    assert history[1]["content"] == "Hi there!"
+    assert history[1]["query_type"] == "insight"
+
+
+async def test_chat_history_separate_sessions(chat_repo: ChatHistoryRepository):
+    """Test that chat history is separated by session."""
+    await chat_repo.add_message("session-a", "user", "question a")
+    await chat_repo.add_message("session-b", "user", "question b")
+
+    history_a = await chat_repo.get_history("session-a")
+    assert len(history_a) == 1
+    assert history_a[0]["content"] == "question a"
+
+    history_b = await chat_repo.get_history("session-b")
+    assert len(history_b) == 1
+    assert history_b[0]["content"] == "question b"
+
+
+async def test_chat_history_empty_session(chat_repo: ChatHistoryRepository):
+    """Test getting history for nonexistent session returns empty list."""
+    history = await chat_repo.get_history("nonexistent")
+    assert history == []
