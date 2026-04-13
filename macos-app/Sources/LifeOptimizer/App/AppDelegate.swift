@@ -10,6 +10,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private let chatViewModel = ChatViewModel()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Set as accessory app (menubar only, no dock icon)
+        NSApp.setActivationPolicy(.accessory)
+
         // Register global hotkey (Cmd+Shift+Space)
         registerHotkey()
 

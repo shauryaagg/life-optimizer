@@ -12,6 +12,24 @@ class SetupManager: ObservableObject {
 
     let permissionManager = PermissionManager()
 
+    /// On init, verify that a previous "complete" setup is still valid.
+    /// If the project directory doesn't have config.yaml, reset setup.
+    func validateSetup() {
+        guard isSetupComplete else { return }
+        let projectDir = PythonDiscovery.projectDirectory()
+        let configExists = FileManager.default.fileExists(
+            atPath: projectDir.appendingPathComponent("config.yaml").path
+        )
+        let pythonPath = PythonDiscovery.findPython()
+        let pythonExists = FileManager.default.isExecutableFile(atPath: pythonPath)
+
+        if !configExists || !pythonExists {
+            // Previous setup is invalid — reset
+            isSetupComplete = false
+            step = .welcome
+        }
+    }
+
     enum SetupStep: Int, CaseIterable {
         case welcome
         case permissions

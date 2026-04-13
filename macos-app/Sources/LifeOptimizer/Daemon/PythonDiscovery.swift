@@ -23,11 +23,35 @@ struct PythonDiscovery {
 
     /// Get the Life Optimizer Python project directory.
     static func projectDirectory() -> URL {
+        // 1. User-configured path
         if let stored = UserDefaults.standard.string(forKey: "projectPath"),
-           !stored.isEmpty
+           !stored.isEmpty,
+           FileManager.default.fileExists(atPath: stored + "/config.yaml")
         {
             return URL(fileURLWithPath: stored)
         }
+
+        // 2. Check if we're inside the project repo (development mode)
+        //    Walk up from the executable to find config.yaml
+        if let execURL = Bundle.main.executableURL {
+            var dir = execURL.deletingLastPathComponent()
+            for _ in 0..<6 {
+                let configPath = dir.appendingPathComponent("config.yaml").path
+                if FileManager.default.fileExists(atPath: configPath) {
+                    return dir
+                }
+                dir = dir.deletingLastPathComponent()
+            }
+        }
+
+        // 3. Check common development location
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let devPath = home.appendingPathComponent("Documents/GitHub/life-optimizer")
+        if FileManager.default.fileExists(atPath: devPath.appendingPathComponent("config.yaml").path) {
+            return devPath
+        }
+
+        // 4. Fall back to Application Support
         return appSupportDir()
     }
 
