@@ -75,6 +75,8 @@ def create_app(config: Config) -> FastAPI:
     # Include route modules
     from life_optimizer.dashboard.routes.api import router as api_router
     from life_optimizer.dashboard.routes.chat import router as chat_router
+    from life_optimizer.dashboard.routes.chat_page import router as chat_page_router
+    from life_optimizer.dashboard.routes.focus import router as focus_router
     from life_optimizer.dashboard.routes.reports import router as reports_router
     from life_optimizer.dashboard.routes.screenshots import router as screenshots_router
     from life_optimizer.dashboard.routes.settings import router as settings_router
@@ -82,7 +84,9 @@ def create_app(config: Config) -> FastAPI:
 
     app.include_router(timeline_router)
     app.include_router(reports_router)
+    app.include_router(focus_router)
     app.include_router(screenshots_router)
+    app.include_router(chat_page_router)
     app.include_router(settings_router)
     app.include_router(api_router)
     app.include_router(chat_router)

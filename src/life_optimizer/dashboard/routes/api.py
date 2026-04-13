@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Request
 
 from life_optimizer.storage.repositories import (
+    EntityRepository,
     EventRepository,
     ScreenshotRepository,
     SessionRepository,
@@ -126,3 +128,207 @@ async def api_screenshots(request: Request, date: str | None = None, limit: int 
     repo = ScreenshotRepository(db)
     screenshots = await repo.get_screenshots(date=date, limit=limit)
     return [asdict(s) for s in screenshots]
+
+
+@router.get("/stats/weekly")
+async def api_stats_weekly(request: Request, week_offset: int = 0):
+    """Return category totals per day for the specified week.
+
+    Args:
+        week_offset: 0 = this week, 1 = last week, etc.
+    """
+    db = request.app.state.db
+    repo = SessionRepository(db)
+
+    today = date.today()
+    # Monday of the current week
+    monday = today - timedelta(days=today.weekday())
+    # Apply offset
+    week_start = monday - timedelta(weeks=week_offset)
+
+    days = []
+    for i in range(7):
+        day = week_start + timedelta(days=i)
+        day_str = day.isoformat()
+        sessions = await repo.get_sessions(date=day_str)
+
+        categories: dict[str, float] = defaultdict(float)
+        total_minutes = 0.0
+        for s in sessions:
+            cat = s.category or "other"
+            dur = (s.duration_seconds or 0) / 60
+            categories[cat] += dur
+            total_minutes += dur
+
+        # Round values
+        categories_rounded = {k: round(v, 1) for k, v in categories.items()}
+
+        days.append({
+            "date": day_str,
+            "categories": categories_rounded,
+            "total_minutes": round(total_minutes, 1),
+        })
+
+    return {
+        "week_start": week_start.isoformat(),
+        "days": days,
+    }
+
+
+@router.get("/stats/monthly")
+async def api_stats_monthly(request: Request, month: str | None = None):
+    """Return daily totals for a given month.
+
+    Args:
+        month: Month in YYYY-MM format. Defaults to current month.
+    """
+    db = request.app.state.db
+    repo = SessionRepository(db)
+
+    if month is None:
+        month = date.today().strftime("%Y-%m")
+
+    # Parse the month
+    try:
+        year, mon = month.split("-")
+        year_int, mon_int = int(year), int(mon)
+    except (ValueError, AttributeError):
+        return {"month": month, "days": []}
+
+    # Determine the number of days in the month
+    if mon_int == 12:
+        next_month_start = date(year_int + 1, 1, 1)
+    else:
+        next_month_start = date(year_int, mon_int + 1, 1)
+    month_start = date(year_int, mon_int, 1)
+    num_days = (next_month_start - month_start).days
+
+    days = []
+    for i in range(num_days):
+        day = month_start + timedelta(days=i)
+        # Only include days up to today
+        if day > date.today():
+            break
+        day_str = day.isoformat()
+        sessions = await repo.get_sessions(date=day_str)
+
+        total_minutes = 0.0
+        deep_work_minutes = 0.0
+        app_counts: dict[str, float] = defaultdict(float)
+
+        for s in sessions:
+            dur = (s.duration_seconds or 0) / 60
+            total_minutes += dur
+            if s.category == "deep_work":
+                deep_work_minutes += dur
+            app_counts[s.app_name] += dur
+
+        top_app = max(app_counts, key=app_counts.get) if app_counts else None
+
+        days.append({
+            "date": day_str,
+            "total_minutes": round(total_minutes, 1),
+            "deep_work_minutes": round(deep_work_minutes, 1),
+            "top_app": top_app,
+        })
+
+    return {
+        "month": month,
+        "days": days,
+    }
+
+
+@router.get("/sessions/timeline")
+async def api_sessions_timeline(request: Request, days: int = 7):
+    """Return sessions for the last N days with start/end times and categories."""
+    db = request.app.state.db
+    repo = SessionRepository(db)
+
+    today = date.today()
+    result_sessions = []
+
+    for i in range(days):
+        day = today - timedelta(days=i)
+        day_str = day.isoformat()
+        sessions = await repo.get_sessions(date=day_str)
+
+        for s in sessions:
+            start_time = ""
+            end_time = ""
+            try:
+                start_dt = datetime.fromisoformat(s.start_time)
+                start_time = start_dt.strftime("%H:%M")
+                if s.end_time:
+                    end_dt = datetime.fromisoformat(s.end_time)
+                    end_time = end_dt.strftime("%H:%M")
+            except (ValueError, TypeError):
+                pass
+
+            result_sessions.append({
+                "date": day_str,
+                "start_time": start_time,
+                "end_time": end_time,
+                "app_name": s.app_name,
+                "category": s.category or "other",
+                "duration_minutes": round((s.duration_seconds or 0) / 60, 1),
+            })
+
+    return {"sessions": result_sessions}
+
+
+@router.get("/entities/graph")
+async def api_entities_graph(request: Request, days: int = 30):
+    """Return nodes and edges for entity interaction graph.
+
+    Nodes are entities with interaction_count.
+    Edges represent co-occurrence of entities in the same hour window.
+    """
+    db = request.app.state.db
+    entity_repo = EntityRepository(db)
+
+    entities = await entity_repo.get_entities(limit=200)
+
+    nodes = [
+        {
+            "id": e.id,
+            "name": e.name,
+            "type": e.entity_type,
+            "interactions": e.interaction_count,
+        }
+        for e in entities
+    ]
+
+    # Build edges based on co-occurrence in the same hour
+    # Get mentions for each entity and find hourly overlaps
+    entity_hours: dict[int, set[str]] = {}
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+    for e in entities:
+        mentions = await entity_repo.get_mentions(e.id, limit=500)
+        hours = set()
+        for m in mentions:
+            if m.timestamp and m.timestamp >= cutoff:
+                # Truncate to hour
+                try:
+                    dt = datetime.fromisoformat(m.timestamp)
+                    hours.add(dt.strftime("%Y-%m-%d %H"))
+                except (ValueError, TypeError):
+                    pass
+        entity_hours[e.id] = hours
+
+    # Find co-occurrences
+    edges = []
+    entity_ids = [e.id for e in entities]
+    for i in range(len(entity_ids)):
+        for j in range(i + 1, len(entity_ids)):
+            id_a = entity_ids[i]
+            id_b = entity_ids[j]
+            overlap = entity_hours.get(id_a, set()) & entity_hours.get(id_b, set())
+            if overlap:
+                edges.append({
+                    "source": id_a,
+                    "target": id_b,
+                    "weight": len(overlap),
+                })
+
+    return {"nodes": nodes, "edges": edges}

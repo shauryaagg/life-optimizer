@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Life Optimizer{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-[calc(100vh-8rem)]">
+    <!-- Header -->
+    <div class="mb-4">
+        <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-gray-900">Ask about your activity</h1>
+            <button id="new-chat-btn" onclick="resetChat()"
+                    class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hidden">
+                New Chat
+            </button>
+        </div>
+    </div>
+
+    <!-- Initial search area (shown when no conversation) -->
+    <div id="initial-search" class="flex-1 flex flex-col items-center justify-center">
+        <div class="w-full max-w-2xl">
+            <div class="relative">
+                <input type="text" id="search-input"
+                       placeholder="Ask anything about your activity..."
+                       class="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                       onkeydown="if(event.key==='Enter')submitQuestion(this.value)">
+                <button onclick="submitQuestion(document.getElementById('search-input').value)"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">
+                    Ask
+                </button>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-2 justify-center">
+                <button class="suggestion-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200"
+                        onclick="submitQuestion('How much deep work today?')">How much deep work today?</button>
+                <button class="suggestion-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200"
+                        onclick="submitQuestion('What was I doing at 3pm?')">What was I doing at 3pm?</button>
+                <button class="suggestion-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200"
+                        onclick="submitQuestion('Compare this week to last week')">Compare this week to last week</button>
+                <button class="suggestion-chip px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200"
+                        onclick="submitQuestion('Who did I message most today?')">Who did I message most today?</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conversation area (hidden initially) -->
+    <div id="conversation-area" class="flex-1 flex flex-col hidden">
+        <div id="messages" class="flex-1 overflow-y-auto space-y-4 pb-4">
+        </div>
+
+        <!-- Follow-up suggestions -->
+        <div id="follow-up-chips" class="flex flex-wrap gap-2 mb-3 hidden">
+        </div>
+
+        <!-- Follow-up input -->
+        <div class="border-t pt-3">
+            <div class="relative">
+                <input type="text" id="followup-input"
+                       placeholder="Ask a follow-up question..."
+                       class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                       onkeydown="if(event.key==='Enter')submitQuestion(this.value)">
+                <button onclick="submitQuestion(document.getElementById('followup-input').value)"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading spinner -->
+    <div id="loading-spinner" class="hidden flex justify-start mb-4">
+        <div class="bg-gray-100 rounded-lg px-4 py-3 max-w-xl">
+            <div class="flex items-center space-x-2">
+                <div class="animate-spin rounded-full h-4 w-4 border-2 border-gray-400 border-t-indigo-600"></div>
+                <span class="text-sm text-gray-500">Thinking...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let sessionId = null;
+let chatHistory = [];
+
+function resetChat() {
+    sessionId = null;
+    chatHistory = [];
+    document.getElementById('initial-search').classList.remove('hidden');
+    document.getElementById('conversation-area').classList.add('hidden');
+    document.getElementById('new-chat-btn').classList.add('hidden');
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('follow-up-chips').classList.add('hidden');
+    document.getElementById('follow-up-chips').innerHTML = '';
+    document.getElementById('search-input').value = '';
+}
+
+function addMessage(role, content) {
+    const messagesDiv = document.getElementById('messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = role === 'user'
+        ? 'flex justify-end'
+        : 'flex justify-start';
+
+    const bubble = document.createElement('div');
+    bubble.className = role === 'user'
+        ? 'bg-indigo-600 text-white rounded-lg px-4 py-2.5 max-w-xl'
+        : 'bg-gray-100 text-gray-900 rounded-lg px-4 py-2.5 max-w-xl';
+
+    // Simple markdown-ish formatting for assistant messages
+    if (role === 'assistant') {
+        let html = content
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded text-sm">$1</code>')
+            .replace(/\n/g, '<br>');
+        bubble.innerHTML = '<div class="text-sm leading-relaxed">' + html + '</div>';
+    } else {
+        bubble.textContent = content;
+    }
+
+    msgDiv.appendChild(bubble);
+    messagesDiv.appendChild(msgDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function showFollowUpSuggestions(suggestions) {
+    const container = document.getElementById('follow-up-chips');
+    container.innerHTML = '';
+    if (!suggestions || suggestions.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+    suggestions.forEach(function(s) {
+        const btn = document.createElement('button');
+        btn.className = 'px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 border border-gray-200';
+        btn.textContent = s;
+        btn.onclick = function() { submitQuestion(s); };
+        container.appendChild(btn);
+    });
+    container.classList.remove('hidden');
+}
+
+async function submitQuestion(question) {
+    if (!question || !question.trim()) return;
+    question = question.trim();
+
+    // Switch to conversation mode
+    document.getElementById('initial-search').classList.add('hidden');
+    document.getElementById('conversation-area').classList.remove('hidden');
+    document.getElementById('new-chat-btn').classList.remove('hidden');
+
+    // Add user message
+    addMessage('user', question);
+    chatHistory.push({role: 'user', content: question});
+
+    // Clear inputs
+    document.getElementById('search-input').value = '';
+    document.getElementById('followup-input').value = '';
+    document.getElementById('follow-up-chips').classList.add('hidden');
+
+    // Show loading
+    const spinner = document.getElementById('loading-spinner');
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.appendChild(spinner);
+    spinner.classList.remove('hidden');
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    try {
+        const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                question: question,
+                session_id: sessionId,
+                history: chatHistory.slice(0, -1),
+            }),
+        });
+        const data = await resp.json();
+
+        // Hide spinner
+        spinner.classList.add('hidden');
+
+        // Update session
+        sessionId = data.session_id;
+
+        // Add assistant message
+        addMessage('assistant', data.answer);
+        chatHistory.push({role: 'assistant', content: data.answer});
+
+        // Show follow-up suggestions
+        showFollowUpSuggestions(data.follow_up_suggestions);
+
+    } catch (err) {
+        spinner.classList.add('hidden');
+        addMessage('assistant', 'Sorry, something went wrong. Please try again.');
+        console.error('Chat error:', err);
+    }
+
+    // Focus follow-up input
+    document.getElementById('followup-input').focus();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+<div id="monthly-heatmap" class="text-center py-4 text-gray-500">Loading heatmap...</div>
+<div class="mt-3 flex items-center gap-2 text-xs text-gray-500">
+    <span>Less</span>
+    <span class="w-3 h-3 rounded" style="background:#ebedf0"></span>
+    <span class="w-3 h-3 rounded" style="background:#9be9a8"></span>
+    <span class="w-3 h-3 rounded" style="background:#40c463"></span>
+    <span class="w-3 h-3 rounded" style="background:#216e39"></span>
+    <span>More</span>
+</div>
+<script>
+    if (typeof loadMonthlyHeatmap === 'function') {
+        loadMonthlyHeatmap();
+    }
+</script>

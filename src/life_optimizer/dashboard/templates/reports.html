@@ -37,10 +37,48 @@
     </div>
 </div>
 
+    <!-- Weekly Trends Section -->
+    <div class="mt-8">
+        <h2 class="text-xl font-bold text-gray-900 mb-4">Weekly Trends</h2>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div id="weekly-trends-container">
+                <div class="relative" style="height: 350px;">
+                    <canvas id="weekly-trends-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Heatmap Section -->
+    <div class="mt-8">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-gray-900">Monthly Deep Work Heatmap</h2>
+            <div class="flex items-center space-x-3">
+                <label for="heatmap-month" class="text-sm font-medium text-gray-700">Month:</label>
+                <input type="month" id="heatmap-month" value="{{ today[:7] }}"
+                       class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-1.5 border"
+                       onchange="loadMonthlyHeatmap()">
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <div id="monthly-heatmap" class="text-center py-4 text-gray-500">Loading heatmap...</div>
+            <div class="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                <span>Less</span>
+                <span class="w-3 h-3 rounded" style="background:#ebedf0"></span>
+                <span class="w-3 h-3 rounded" style="background:#9be9a8"></span>
+                <span class="w-3 h-3 rounded" style="background:#40c463"></span>
+                <span class="w-3 h-3 rounded" style="background:#216e39"></span>
+                <span>More</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="/static/js/charts.js"></script>
 <script>
 let categoryChart = null;
 let appsChart = null;
+let weeklyTrendsChart = null;
 
 function updateReport() {
     const date = document.getElementById('report-date').value;
@@ -63,8 +101,36 @@ async function loadCharts(date) {
     }
 }
 
+async function loadWeeklyTrends() {
+    try {
+        const [thisWeekResp, lastWeekResp] = await Promise.all([
+            fetch('/api/stats/weekly?week_offset=0'),
+            fetch('/api/stats/weekly?week_offset=1'),
+        ]);
+        const thisWeekData = await thisWeekResp.json();
+        const lastWeekData = await lastWeekResp.json();
+        if (weeklyTrendsChart) weeklyTrendsChart.destroy();
+        weeklyTrendsChart = renderWeeklyTrends(thisWeekData, lastWeekData, 'weekly-trends-chart');
+    } catch (e) {
+        console.error('Failed to load weekly trends:', e);
+    }
+}
+
+async function loadMonthlyHeatmap() {
+    const month = document.getElementById('heatmap-month').value;
+    try {
+        const resp = await fetch('/api/stats/monthly?month=' + month);
+        const data = await resp.json();
+        renderMonthlyHeatmap(data, 'monthly-heatmap');
+    } catch (e) {
+        console.error('Failed to load monthly heatmap:', e);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     loadCharts('{{ today }}');
+    loadWeeklyTrends();
+    loadMonthlyHeatmap();
 });
 </script>
 {% endblock %}

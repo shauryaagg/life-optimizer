@@ -1,0 +1,19 @@
+{% if days_data %}
+{% for day in days_data %}
+<div class="mb-4">
+    <div class="text-sm font-medium text-gray-700 mb-1">{{ day.date }}</div>
+    <div class="relative bg-gray-50 rounded h-8 border border-gray-200" style="min-width: 100%;">
+        {% for session in day.sessions %}
+        {% if session.start_time and session.duration_seconds %}
+        <div class="absolute h-full rounded opacity-80 hover:opacity-100 cursor-pointer session-bar"
+             title="{{ session.app_name }} | {{ session.start_time }} - {{ session.end_time or '?' }} | {{ ((session.duration_seconds or 0) / 60)|round(1) }}min"
+             style="left: {{ ((session.start_time[:2]|int * 60 + session.start_time[3:5]|int - 360) / (1080)) * 100 }}%; width: {{ ((session.duration_seconds or 0) / 64800) * 100 }}%; background: {% if session.category == 'deep_work' %}#10b981{% elif session.category == 'communication' %}#3b82f6{% elif session.category == 'browsing' %}#8b5cf6{% elif session.category == 'social_media' %}#ef4444{% elif session.category == 'entertainment' %}#f59e0b{% elif session.category == 'planning' %}#06b6d4{% elif session.category == 'learning' %}#84cc16{% elif session.category == 'personal' %}#ec4899{% else %}#6b7280{% endif %};">
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="text-center py-8 text-gray-500">No session data available.</div>
+{% endif %}
