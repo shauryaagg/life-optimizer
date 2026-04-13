@@ -1,0 +1,58 @@
+daemon:
+  poll_interval: 2.0
+  idle_threshold: 300
+
+collectors:
+  enabled:
+    - chrome
+    - safari
+    - slack
+    - terminal
+    - vscode
+    - calendar
+    - finder
+    - messages
+    - mail
+    - generic
+
+  messages:
+    include_content: false
+
+chrome_extension:
+  enabled: true
+
+storage:
+  db_path: ~/Library/Application Support/LifeOptimizer/data/life_optimizer.db
+
+screenshots:
+  enabled: true
+  interval: 30
+  quality: 60
+  scale: 0.5
+  capture_on_app_switch: true
+  retention_days: 30
+
+llm:
+  provider: claude
+  claude:
+    model: claude-sonnet-4-20250514
+    api_key_env: ANTHROPIC_API_KEY
+  ollama:
+    model: llama3.1:8b
+    base_url: http://localhost:11434
+  batch_interval: 3600
+  daily_insight_time: "22:00"
+
+dashboard:
+  host: 127.0.0.1
+  port: 8765
+
+query:
+  chromadb_dir: ~/Library/Application Support/LifeOptimizer/data/chromadb
+  max_sql_results: 1000
+  sql_timeout_seconds: 5
+
+memory:
+  archive_after_days: 14
+  delete_after_days: 90
+  compression_enabled: true
