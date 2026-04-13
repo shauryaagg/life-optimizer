@@ -1,55 +1,84 @@
 import AppKit
 import SwiftUI
 
-/// Application delegate for lifecycle management and global hotkey.
+/// Application delegate — owns ALL startup logic.
+/// MenuBarExtra.onAppear only fires on click, so we drive everything from here.
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+
+    let daemonManager = DaemonManager()
+    let setupManager = SetupManager()
 
     private var hotkeyManager = HotkeyManager()
     private var spotlightPanel: SpotlightPanel?
     private let chatViewModel = ChatViewModel()
+    private var setupWindowController: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set as accessory app (menubar only, no dock icon)
+        // Menubar-only app (no dock icon)
         NSApp.setActivationPolicy(.accessory)
 
-        // Register global hotkey (Cmd+Shift+Space)
-        registerHotkey()
-
-        // Create the spotlight panel
+        // Create spotlight panel (hidden initially)
         spotlightPanel = SpotlightPanel(chatViewModel: chatViewModel)
 
-        // Check accessibility permission and warn if not granted
-        if !HotkeyManager.isAccessibilityGranted {
-            showAccessibilityWarning()
+        // Register global hotkey
+        hotkeyManager.register { [weak self] in
+            self?.toggleSpotlightPanel()
+        }
+
+        // Decide: show onboarding or start daemon
+        if setupManager.isSetupComplete {
+            // Setup was done before — just start the daemon
+            daemonManager.startAll()
+        } else {
+            // First launch — show the onboarding window immediately
+            showSetupWindow()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
+        daemonManager.stopAll()
+    }
+
+    // MARK: - Setup Window
+
+    func showSetupWindow() {
+        // If already showing, just bring to front
+        if let wc = setupWindowController, let w = wc.window, w.isVisible {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 440),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Life Optimizer Setup"
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        let setupView = SetupView(setupManager: setupManager) { [weak self] in
+            // Called when setup is complete
+            self?.setupWindowController?.close()
+            self?.setupWindowController = nil
+            self?.daemonManager.startAll()
+        }
+        window.contentView = NSHostingView(rootView: setupView)
+
+        let controller = NSWindowController(window: window)
+        controller.showWindow(nil)
+        setupWindowController = controller
+
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Spotlight Panel
 
     func toggleSpotlightPanel() {
         spotlightPanel?.toggle()
-    }
-
-    // MARK: - Hotkey Registration
-
-    private func registerHotkey() {
-        hotkeyManager.register { [weak self] in
-            self?.toggleSpotlightPanel()
-        }
-    }
-
-    // MARK: - Accessibility Warning
-
-    private func showAccessibilityWarning() {
-        // The global hotkey requires Accessibility permission.
-        // We prompt on first launch via PermissionManager, but also
-        // check here in case the user hasn't granted it.
-        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
     }
 }

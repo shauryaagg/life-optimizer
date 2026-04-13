@@ -3,6 +3,7 @@ import SwiftUI
 /// Multi-step onboarding view for first-launch setup.
 struct SetupView: View {
     @ObservedObject var setupManager: SetupManager
+    var onComplete: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,12 +32,12 @@ struct SetupView: View {
                 case .llmSetup:
                     LLMSetupStepView(setupManager: setupManager)
                 case .complete:
-                    CompleteStepView(setupManager: setupManager)
+                    CompleteStepView(setupManager: setupManager, onComplete: onComplete)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 520, height: 440)
     }
 }
 
@@ -57,7 +58,7 @@ struct WelcomeStepView: View {
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("Track your digital activity, gain insights, and optimize your productivity. This setup wizard will help you get started.")
+            Text("Track your Mac activity, get AI-powered insights, and optimize how you spend your time. Everything stays 100% private on your machine.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -79,6 +80,7 @@ struct WelcomeStepView: View {
 
 struct PermissionsStepView: View {
     @ObservedObject var setupManager: SetupManager
+    @State private var pollingTimer: Timer?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -87,7 +89,7 @@ struct PermissionsStepView: View {
                 .fontWeight(.bold)
                 .padding(.top, 20)
 
-            Text("Life Optimizer needs these permissions to track your activity:")
+            Text("Life Optimizer needs these macOS permissions to work:")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -96,19 +98,25 @@ struct PermissionsStepView: View {
             VStack(spacing: 12) {
                 PermissionRow(
                     title: "Accessibility",
-                    description: "Required for tracking active windows and global hotkey",
+                    description: "Track which app is active and enable the Cmd+Shift+Space hotkey",
                     isGranted: setupManager.permissionManager.accessibilityGranted,
                     action: { setupManager.requestAccessibility() }
                 )
 
                 PermissionRow(
                     title: "Screen Recording",
-                    description: "Required for capturing screenshots for analysis",
+                    description: "Capture smart screenshots for context",
                     isGranted: setupManager.permissionManager.screenRecordingGranted,
                     action: { setupManager.openScreenRecordingSettings() }
                 )
             }
             .padding(.horizontal, 24)
+
+            if setupManager.permissionManager.accessibilityGranted {
+                Text("Accessibility granted!")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
 
             Spacer()
 
@@ -116,15 +124,24 @@ struct PermissionsStepView: View {
                 Button("Back") { setupManager.previousStep() }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button("Refresh") { setupManager.checkPermissions() }
-                    .buttonStyle(.bordered)
                 Button("Continue") { setupManager.nextStep() }
                     .buttonStyle(.borderedProminent)
+                    // Allow continuing even without Screen Recording — it's optional
+                    .disabled(!setupManager.permissionManager.accessibilityGranted)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
-        .onAppear { setupManager.checkPermissions() }
+        .onAppear {
+            setupManager.checkPermissions()
+            // Poll every 2 seconds to detect permission grants
+            pollingTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+                setupManager.checkPermissions()
+            }
+        }
+        .onDisappear {
+            pollingTimer?.invalidate()
+        }
     }
 }
 
@@ -159,7 +176,7 @@ struct PermissionRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.secondary.opacity(0.05))
+                .fill(isGranted ? Color.green.opacity(0.05) : Color.secondary.opacity(0.05))
         )
     }
 }
@@ -168,8 +185,9 @@ struct PermissionRow: View {
 
 struct PythonSetupStepView: View {
     @ObservedObject var setupManager: SetupManager
-    @State private var projectPath: String = ""
     @State private var isRunning = false
+    @State private var pythonStatus = "Checking..."
+    @State private var detectedPython = ""
 
     var body: some View {
         VStack(spacing: 16) {
@@ -178,35 +196,34 @@ struct PythonSetupStepView: View {
                 .fontWeight(.bold)
                 .padding(.top, 20)
 
-            Text("Life Optimizer needs Python 3.12+ to run the backend.")
-                .font(.body)
-                .foregroundColor(.secondary)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Project Path")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if !detectedPython.isEmpty {
                 HStack {
-                    TextField("Path to life-optimizer project", text: $projectPath)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Browse") {
-                        let panel = NSOpenPanel()
-                        panel.canChooseDirectories = true
-                        panel.canChooseFiles = false
-                        panel.allowsMultipleSelection = false
-                        if panel.runModal() == .OK, let url = panel.url {
-                            projectPath = url.path
-                            UserDefaults.standard.set(projectPath, forKey: "projectPath")
-                        }
-                    }
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("Python found: \(detectedPython)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                HStack {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                    Text(pythonStatus)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
-            .padding(.horizontal, 24)
+
+            Text("Life Optimizer will create an isolated Python environment and install all dependencies automatically.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
 
             if isRunning {
                 VStack(spacing: 8) {
                     ProgressView(value: setupManager.progress)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 40)
                     Text(setupManager.statusMessage)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -218,6 +235,7 @@ struct PythonSetupStepView: View {
                     .font(.caption)
                     .foregroundColor(.red)
                     .padding(.horizontal, 24)
+                    .lineLimit(3)
             }
 
             Spacer()
@@ -225,14 +243,13 @@ struct PythonSetupStepView: View {
             HStack {
                 Button("Back") { setupManager.previousStep() }
                     .buttonStyle(.bordered)
+                    .disabled(isRunning)
                 Spacer()
                 Button("Skip") { setupManager.nextStep() }
                     .buttonStyle(.bordered)
-                Button("Install") {
+                    .disabled(isRunning)
+                Button(isRunning ? "Installing..." : "Install") {
                     isRunning = true
-                    if !projectPath.isEmpty {
-                        UserDefaults.standard.set(projectPath, forKey: "projectPath")
-                    }
                     Task {
                         await setupManager.setupPython()
                         isRunning = false
@@ -242,13 +259,22 @@ struct PythonSetupStepView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isRunning)
+                .disabled(isRunning || detectedPython.isEmpty)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)
         }
         .onAppear {
-            projectPath = UserDefaults.standard.string(forKey: "projectPath") ?? ""
+            Task {
+                let python = PythonDiscovery.findPython()
+                if FileManager.default.isExecutableFile(atPath: python) {
+                    detectedPython = python
+                    pythonStatus = "Found"
+                } else {
+                    detectedPython = ""
+                    pythonStatus = "Python 3.12+ not found. Install from python.org or Homebrew."
+                }
+            }
         }
     }
 }
@@ -267,14 +293,15 @@ struct LLMSetupStepView: View {
                 .fontWeight(.bold)
                 .padding(.top, 20)
 
-            Text("Choose your AI provider for activity analysis and chat.")
+            Text("Choose how Life Optimizer analyzes your activity.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
 
             Picker("Provider", selection: $llmProvider) {
-                Text("Claude (Anthropic)").tag("claude")
-                Text("Ollama (Local)").tag("ollama")
+                Text("Claude (Anthropic API)").tag("claude")
+                Text("Ollama (100% Local)").tag("ollama")
+                Text("None (Rule-based only)").tag("none")
             }
             .pickerStyle(.radioGroup)
             .padding(.horizontal, 24)
@@ -286,22 +313,20 @@ struct LLMSetupStepView: View {
                         .foregroundColor(.secondary)
                     SecureField("sk-ant-...", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
-                    Text("Your key is stored securely in the macOS Keychain.")
+                    Text("Stored securely in macOS Keychain. Only activity summaries are sent — never raw data.")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 24)
-            } else {
-                Text("Make sure Ollama is running locally on port 11434.")
+            } else if llmProvider == "ollama" {
+                Text("Make sure Ollama is running at localhost:11434.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 24)
-            }
-
-            if let error = setupManager.error {
-                Text(error)
+            } else {
+                Text("Activity tracking works without AI. You can enable it later in Settings.")
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.secondary)
                     .padding(.horizontal, 24)
             }
 
@@ -311,8 +336,6 @@ struct LLMSetupStepView: View {
                 Button("Back") { setupManager.previousStep() }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button("Skip") { setupManager.nextStep() }
-                    .buttonStyle(.bordered)
                 Button("Continue") {
                     if llmProvider == "claude" && !apiKey.isEmpty {
                         setupManager.saveAPIKey(apiKey)
@@ -334,6 +357,7 @@ struct LLMSetupStepView: View {
 
 struct CompleteStepView: View {
     @ObservedObject var setupManager: SetupManager
+    var onComplete: () -> Void
 
     var body: some View {
         VStack(spacing: 20) {
@@ -347,16 +371,23 @@ struct CompleteStepView: View {
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("Life Optimizer is ready. The daemon will start tracking your activity and you can ask questions anytime with Cmd+Shift+Space.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+            VStack(spacing: 8) {
+                Text("Life Optimizer will appear in your menubar.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+
+                Text("Press **Cmd + Shift + Space** anytime to ask questions about your day.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 40)
 
             Spacer()
 
-            Button("Start Life Optimizer") {
+            Button("Start Tracking") {
                 setupManager.completeSetup()
+                onComplete()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

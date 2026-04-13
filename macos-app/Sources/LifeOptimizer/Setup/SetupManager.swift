@@ -12,24 +12,6 @@ class SetupManager: ObservableObject {
 
     let permissionManager = PermissionManager()
 
-    /// On init, verify that a previous "complete" setup is still valid.
-    /// If the project directory doesn't have config.yaml, reset setup.
-    func validateSetup() {
-        guard isSetupComplete else { return }
-        let projectDir = PythonDiscovery.projectDirectory()
-        let configExists = FileManager.default.fileExists(
-            atPath: projectDir.appendingPathComponent("config.yaml").path
-        )
-        let pythonPath = PythonDiscovery.findPython()
-        let pythonExists = FileManager.default.isExecutableFile(atPath: pythonPath)
-
-        if !configExists || !pythonExists {
-            // Previous setup is invalid — reset
-            isSetupComplete = false
-            step = .welcome
-        }
-    }
-
     enum SetupStep: Int, CaseIterable {
         case welcome
         case permissions
@@ -73,15 +55,14 @@ class SetupManager: ObservableObject {
         permissionManager.openScreenRecordingSettings()
     }
 
-    /// Run Python setup.
+    /// Run Python setup — auto-detects project path.
     func setupPython() async {
         error = nil
-        let projectPath = UserDefaults.standard.string(forKey: "projectPath")
-            ?? PythonDiscovery.projectDirectory().path
+        let projectDir = PythonDiscovery.projectDirectory()
 
         do {
-            try await PythonSetup.performFullSetup(projectPath: projectPath) { [weak self] message, prog in
-                DispatchQueue.main.async {
+            try await PythonSetup.performFullSetup(projectPath: projectDir.path) { [weak self] message, prog in
+                Task { @MainActor [weak self] in
                     self?.statusMessage = message
                     self?.progress = prog
                 }
