@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "Life Optimizer",
+    "description": "Local activity tracking - sends page metadata to localhost only",
+    "version": "1.0.0",
+    "permissions": ["activeTab", "tabs"],
+    "host_permissions": ["http://127.0.0.1:8765/*"],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["content.js"],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Life Optimizer"
+    },
+    "icons": {}
+}

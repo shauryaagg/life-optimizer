@@ -52,6 +52,42 @@ class EventRepository:
         logger.debug("Inserted event id=%d for app=%s", row_id, result.app_name)
         return row_id
 
+    async def insert_event_raw(
+        self,
+        timestamp: str,
+        app_name: str,
+        app_bundle_id: str | None = None,
+        event_type: str = "chrome_extension",
+        window_title: str | None = None,
+        context_json: str | None = None,
+    ) -> int:
+        """Insert an event from raw fields (e.g. from Chrome extension) and return the row ID.
+
+        Args:
+            timestamp: ISO format timestamp string.
+            app_name: Name of the application.
+            app_bundle_id: Bundle identifier.
+            event_type: Type of event.
+            window_title: Window or page title.
+            context_json: JSON string of context data.
+
+        Returns:
+            The auto-generated row ID of the inserted event.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            """
+            INSERT INTO events (timestamp, app_name, app_bundle_id, event_type,
+                                window_title, context_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (timestamp, app_name, app_bundle_id, event_type, window_title, context_json),
+        )
+        await conn.commit()
+        row_id = cursor.lastrowid
+        logger.debug("Inserted raw event id=%d for app=%s", row_id, app_name)
+        return row_id
+
     async def get_events(
         self,
         date: str | None = None,

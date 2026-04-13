@@ -11,7 +11,15 @@ collectors:
     - vscode
     - calendar
     - finder
+    - messages
+    - mail
     - generic
+
+  messages:
+    include_content: false  # Only metadata by default
+
+chrome_extension:
+  enabled: true
 
 storage:
   db_path: ./data/life_optimizer.db

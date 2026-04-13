@@ -64,6 +64,8 @@ class Daemon:
         self._llm_pipeline: LLMPipeline | None = None
         self._last_categorization: float = 0
         self._last_daily_insight: str | None = None
+        self._is_idle: bool = False
+        self._idle_start_time: float | None = None
 
     async def start(self) -> None:
         """Initialize all components and start the main polling loop."""
@@ -320,6 +322,40 @@ class Daemon:
 
     async def _poll_once(self) -> None:
         """Execute a single poll cycle."""
+        import time
+
+        # Check idle state
+        idle_seconds = await self._check_idle()
+        idle_threshold = self._config.daemon.idle_threshold
+
+        if idle_seconds >= idle_threshold:
+            if not self._is_idle:
+                # Transition to idle
+                self._is_idle = True
+                self._idle_start_time = time.time()
+                logger.info(
+                    "User idle (%.0fs > %ds threshold)", idle_seconds, idle_threshold
+                )
+            # While idle, skip screenshots and collection
+            return
+
+        if self._is_idle:
+            # Returning from idle
+            idle_duration = time.time() - (self._idle_start_time or time.time())
+            self._is_idle = False
+            self._idle_start_time = None
+            logger.info("User returned from idle (was idle %.0fs)", idle_duration)
+
+            # Take immediate screenshot on return from idle
+            if self._screenshot_scheduler is not None:
+                app_info = await self._detect_frontmost_app()
+                if app_info is not None:
+                    ss_result = await self._screenshot_scheduler.on_app_switch(
+                        app_info[0]
+                    )
+                    if ss_result is not None and self._screenshot_repo is not None:
+                        await self._screenshot_repo.insert_screenshot(ss_result)
+
         # Detect frontmost app
         app_info = await self._detect_frontmost_app()
         if app_info is None:
@@ -390,6 +426,24 @@ class Daemon:
         # Update state
         self._previous_result = result
         self._previous_app = app_name
+
+    async def _check_idle(self) -> float:
+        """Return seconds since last user input (keyboard/mouse).
+
+        Uses CoreGraphics via pyobjc when available, falls back to 0.0.
+
+        Returns:
+            Seconds since last user input event, or 0.0 if unavailable.
+        """
+        try:
+            import Quartz
+            idle_time = Quartz.CGEventSourceSecondsSinceLastEventType(
+                Quartz.kCGEventSourceStateHIDSystemState,
+                Quartz.kCGAnyInputEventType,
+            )
+            return idle_time
+        except (ImportError, Exception):
+            return 0.0
 
     async def _detect_frontmost_app(self) -> tuple[str, str | None] | None:
         """Detect the frontmost macOS application.

@@ -20,9 +20,20 @@ class CollectorsConfig:
     enabled: list[str] = field(
         default_factory=lambda: [
             "chrome", "safari", "slack", "terminal",
-            "vscode", "calendar", "finder", "generic",
+            "vscode", "calendar", "finder", "messages",
+            "mail", "generic",
         ]
     )
+
+
+@dataclass
+class MessagesConfig:
+    include_content: bool = False
+
+
+@dataclass
+class ChromeExtensionConfig:
+    enabled: bool = True
 
 
 @dataclass
@@ -65,6 +76,8 @@ class Config:
     screenshots: ScreenshotsConfig = field(default_factory=ScreenshotsConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
+    messages: MessagesConfig = field(default_factory=MessagesConfig)
+    chrome_extension: ChromeExtensionConfig = field(default_factory=ChromeExtensionConfig)
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -141,5 +154,17 @@ def load_config(path: str = "config.yaml") -> Config:
             config.dashboard.host = str(dash["host"])
         if "port" in dash:
             config.dashboard.port = int(dash["port"])
+
+    if "collectors" in raw:
+        c = raw["collectors"]
+        if "messages" in c and isinstance(c["messages"], dict):
+            msg = c["messages"]
+            if "include_content" in msg:
+                config.messages.include_content = bool(msg["include_content"])
+
+    if "chrome_extension" in raw:
+        ce = raw["chrome_extension"]
+        if "enabled" in ce:
+            config.chrome_extension.enabled = bool(ce["enabled"])
 
     return config

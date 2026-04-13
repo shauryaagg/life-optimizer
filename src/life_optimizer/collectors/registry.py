@@ -10,6 +10,8 @@ from life_optimizer.collectors.chrome import ChromeCollector
 from life_optimizer.collectors.finder import FinderCollector
 from life_optimizer.collectors.generic import GenericCollector
 from life_optimizer.collectors.jxa_bridge import JXABridge
+from life_optimizer.collectors.mail import MailCollector
+from life_optimizer.collectors.messages import MessagesCollector
 from life_optimizer.collectors.safari import SafariCollector
 from life_optimizer.collectors.slack import SlackCollector
 from life_optimizer.collectors.terminal import TerminalCollector
@@ -60,7 +62,8 @@ class CollectorRegistry:
         if enabled is None:
             enabled = [
                 "chrome", "safari", "slack", "terminal",
-                "vscode", "calendar", "finder", "generic",
+                "vscode", "calendar", "finder", "messages",
+                "mail", "generic",
             ]
 
         jxa_bridge = JXABridge()
@@ -94,6 +97,14 @@ class CollectorRegistry:
         if "finder" in enabled:
             registry.register(FinderCollector(jxa_bridge))
             logger.info("Finder collector enabled")
+
+        if "messages" in enabled:
+            registry.register(MessagesCollector(jxa_bridge))
+            logger.info("Messages collector enabled")
+
+        if "mail" in enabled:
+            registry.register(MailCollector(jxa_bridge))
+            logger.info("Mail collector enabled")
 
         logger.info(
             "Registry setup complete: %d app-specific collectors, generic fallback",

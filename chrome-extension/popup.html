@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { width: 280px; padding: 16px; font-family: -apple-system, system-ui, sans-serif; font-size: 13px; }
+        h2 { margin: 0 0 8px; font-size: 15px; }
+        p { margin: 4px 0; color: #555; }
+        .status { padding: 6px 10px; border-radius: 6px; margin-top: 8px; }
+        .connected { background: #d1fae5; color: #065f46; }
+        .disconnected { background: #fee2e2; color: #991b1b; }
+        a { color: #4f46e5; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h2>Life Optimizer</h2>
+    <p>Sends page metadata to your local daemon.</p>
+    <p>All data stays on your machine.</p>
+    <div id="status" class="status disconnected">Checking...</div>
+    <p style="margin-top: 12px"><a href="http://127.0.0.1:8765" target="_blank">Open Dashboard</a></p>
+    <script src="popup.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Request
 
@@ -16,6 +16,42 @@ from life_optimizer.storage.repositories import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/chrome-extension/page-context")
+async def chrome_extension_page_context(request: Request):
+    """Receive page metadata from Chrome extension."""
+    data = await request.json()
+    db = request.app.state.db
+    repo = EventRepository(db)
+
+    await repo.insert_event_raw(
+        timestamp=datetime.now().isoformat(),
+        app_name="Google Chrome",
+        app_bundle_id="com.google.Chrome",
+        event_type="chrome_extension",
+        window_title=data.get("title", ""),
+        context_json=json.dumps(data),
+    )
+    return {"status": "ok"}
+
+
+@router.post("/chrome-extension/tab-switch")
+async def chrome_extension_tab_switch(request: Request):
+    """Receive tab switch notification from Chrome extension."""
+    data = await request.json()
+    db = request.app.state.db
+    repo = EventRepository(db)
+
+    await repo.insert_event_raw(
+        timestamp=data.get("timestamp", datetime.now().isoformat()),
+        app_name="Google Chrome",
+        app_bundle_id="com.google.Chrome",
+        event_type="chrome_extension_tab_switch",
+        window_title=data.get("title", ""),
+        context_json=json.dumps(data),
+    )
+    return {"status": "ok"}
 
 
 @router.get("/events")
