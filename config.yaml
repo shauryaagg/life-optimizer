@@ -34,3 +34,7 @@ llm:
     base_url: http://localhost:11434
   batch_interval: 3600
   daily_insight_time: "22:00"
+
+dashboard:
+  host: 127.0.0.1
+  port: 8765

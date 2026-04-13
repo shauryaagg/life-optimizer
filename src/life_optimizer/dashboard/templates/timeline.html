@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline - Life Optimizer{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900">Activity Timeline</h1>
+        <div class="flex items-center space-x-3">
+            <label for="date-picker" class="text-sm font-medium text-gray-700">Date:</label>
+            <input type="date" id="date-picker" value="{{ today }}"
+                   class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-1.5 border"
+                   onchange="updateTimeline()">
+            <input type="text" id="app-filter" placeholder="Filter by app..."
+                   class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-1.5 border"
+                   onchange="updateTimeline()">
+        </div>
+    </div>
+
+    <div id="event-stream"
+         hx-get="/timeline/events?date={{ today }}"
+         hx-trigger="load, every 30s"
+         hx-swap="innerHTML">
+        <div class="text-center py-8 text-gray-500">Loading events...</div>
+    </div>
+</div>
+
+<script>
+function updateTimeline() {
+    const date = document.getElementById('date-picker').value;
+    const app = document.getElementById('app-filter').value;
+    let url = '/timeline/events?date=' + date;
+    if (app) url += '&app=' + encodeURIComponent(app);
+    const container = document.getElementById('event-stream');
+    container.setAttribute('hx-get', url);
+    htmx.trigger(container, 'load');
+}
+</script>
+{% endblock %}

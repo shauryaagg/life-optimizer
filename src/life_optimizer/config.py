@@ -52,12 +52,19 @@ class LLMConfig:
 
 
 @dataclass
+class DashboardConfig:
+    host: str = "127.0.0.1"
+    port: int = 8765
+
+
+@dataclass
 class Config:
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     collectors: CollectorsConfig = field(default_factory=CollectorsConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     screenshots: ScreenshotsConfig = field(default_factory=ScreenshotsConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    dashboard: DashboardConfig = field(default_factory=DashboardConfig)
 
 
 def load_config(path: str = "config.yaml") -> Config:
@@ -127,5 +134,12 @@ def load_config(path: str = "config.yaml") -> Config:
             config.llm.batch_interval = int(llm["batch_interval"])
         if "daily_insight_time" in llm:
             config.llm.daily_insight_time = str(llm["daily_insight_time"])
+
+    if "dashboard" in raw:
+        dash = raw["dashboard"]
+        if "host" in dash:
+            config.dashboard.host = str(dash["host"])
+        if "port" in dash:
+            config.dashboard.port = int(dash["port"])
 
     return config

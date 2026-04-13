@@ -85,12 +85,23 @@ def test_help_output(capsys):
 
 
 def test_cmd_dashboard(capsys):
-    """Dashboard command should print a placeholder message."""
-    from life_optimizer.cli import cmd_dashboard
+    """Dashboard command should import and attempt to start the dashboard."""
+    from unittest.mock import patch as _patch
 
-    cmd_dashboard()
-    captured = capsys.readouterr()
-    assert "not yet implemented" in captured.out.lower()
+    mock_uvicorn = MagicMock()
+    mock_webbrowser = MagicMock()
+    mock_create_app = MagicMock(return_value=MagicMock())
+
+    with _patch.dict("sys.modules", {"uvicorn": mock_uvicorn}), \
+         _patch("webbrowser.open", mock_webbrowser.open), \
+         _patch("life_optimizer.dashboard.app.create_app", mock_create_app):
+        from life_optimizer.cli import cmd_dashboard
+        cmd_dashboard()
+
+        captured = capsys.readouterr()
+        assert "Starting dashboard" in captured.out
+        mock_uvicorn.run.assert_called_once()
+        mock_webbrowser.open.assert_called_once()
 
 
 def test_cmd_status_runs(capsys):

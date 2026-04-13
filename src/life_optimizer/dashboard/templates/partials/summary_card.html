@@ -1,0 +1,26 @@
+{% if summary %}
+<div class="bg-white rounded-lg shadow p-6 space-y-4">
+    <div>
+        <h2 class="text-lg font-medium text-gray-900">Daily Summary</h2>
+        <p class="text-xs text-gray-400">{{ summary.period_start }} to {{ summary.period_end }}</p>
+    </div>
+    <div class="prose prose-sm max-w-none text-gray-700">
+        {{ summary.summary_text | replace('\n', '<br>') | safe }}
+    </div>
+    {% if summary.insights %}
+    <div class="mt-4 bg-indigo-50 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-indigo-900 mb-1">Insights</h3>
+        <p class="text-sm text-indigo-700">{{ summary.insights }}</p>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="bg-white rounded-lg shadow p-6">
+    {% if event_count and event_count > 0 %}
+    <p class="text-sm text-gray-500">No summary yet for this date -- summaries are generated hourly.</p>
+    <p class="text-xs text-gray-400 mt-1">{{ event_count }} events recorded.</p>
+    {% else %}
+    <p class="text-sm text-gray-500">No data for this date.</p>
+    {% endif %}
+</div>
+{% endif %}

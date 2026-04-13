@@ -1,0 +1,39 @@
+{% if events %}
+<div class="space-y-2">
+    {% for event in events %}
+    <div class="bg-white rounded-lg shadow-sm border-l-4 p-4 cat-{{ (event.category or 'other') | replace('_', '-') }}">
+        <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs font-mono text-gray-400">{{ event.timestamp[11:19] if event.timestamp|length > 19 else event.timestamp }}</span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ event.app_name }}</span>
+                    {% if event.category %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">{{ event.category }}</span>
+                    {% endif %}
+                </div>
+                {% if event.window_title %}
+                <p class="mt-1 text-sm text-gray-600 truncate">{{ event.window_title }}</p>
+                {% endif %}
+                {% if event.context_json %}
+                {% set ctx = event.context_json %}
+                {% if '"url"' in ctx %}
+                <p class="mt-0.5 text-xs text-blue-500 truncate">{{ ctx }}</p>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% if event.duration_seconds %}
+            <span class="ml-2 text-xs text-gray-400 whitespace-nowrap">{{ "%.0f"|format(event.duration_seconds) }}s</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12">
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="mt-2 text-sm text-gray-500">No events recorded for this date.</p>
+    <p class="text-xs text-gray-400">Events will appear here once the daemon is running.</p>
+</div>
+{% endif %}

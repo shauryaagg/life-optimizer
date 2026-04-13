@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - Life Optimizer{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900">Daily Reports</h1>
+        <div class="flex items-center space-x-3">
+            <label for="report-date" class="text-sm font-medium text-gray-700">Date:</label>
+            <input type="date" id="report-date" value="{{ today }}"
+                   class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-1.5 border"
+                   onchange="updateReport()">
+        </div>
+    </div>
+
+    <div id="report-content"
+         hx-get="/reports/daily?date={{ today }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-center py-8 text-gray-500">Loading report...</div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-3">Category Breakdown</h3>
+            <div class="relative" style="height: 300px;">
+                <canvas id="category-chart"></canvas>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-lg font-medium text-gray-900 mb-3">Top Applications</h3>
+            <div class="relative" style="height: 300px;">
+                <canvas id="apps-chart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/charts.js"></script>
+<script>
+let categoryChart = null;
+let appsChart = null;
+
+function updateReport() {
+    const date = document.getElementById('report-date').value;
+    const container = document.getElementById('report-content');
+    container.setAttribute('hx-get', '/reports/daily?date=' + date);
+    htmx.trigger(container, 'load');
+    loadCharts(date);
+}
+
+async function loadCharts(date) {
+    try {
+        const resp = await fetch('/api/stats?date=' + date);
+        const data = await resp.json();
+        if (categoryChart) categoryChart.destroy();
+        if (appsChart) appsChart.destroy();
+        categoryChart = renderCategoryChart('category-chart', data.category_breakdown || {});
+        appsChart = renderAppsChart('apps-chart', data.top_apps || []);
+    } catch (e) {
+        console.error('Failed to load charts:', e);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCharts('{{ today }}');
+});
+</script>
+{% endblock %}

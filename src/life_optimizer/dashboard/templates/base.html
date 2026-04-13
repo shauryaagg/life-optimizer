@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Life Optimizer{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Category colors */
+        .cat-deep-work { border-left-color: #10b981; }
+        .cat-communication { border-left-color: #3b82f6; }
+        .cat-browsing { border-left-color: #8b5cf6; }
+        .cat-social-media { border-left-color: #ef4444; }
+        .cat-entertainment { border-left-color: #f59e0b; }
+        .cat-planning { border-left-color: #06b6d4; }
+        .cat-learning { border-left-color: #84cc16; }
+        .cat-personal { border-left-color: #ec4899; }
+        .cat-other { border-left-color: #6b7280; }
+    </style>
+</head>
+<body class="h-full">
+    <div class="min-h-full">
+        <!-- Navigation -->
+        <nav class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-14">
+                    <div class="flex items-center space-x-8">
+                        <span class="text-lg font-semibold text-gray-900">Life Optimizer</span>
+                        <a href="/timeline" class="text-sm font-medium text-gray-500 hover:text-gray-900 {% if active_page == 'timeline' %}text-gray-900 border-b-2 border-indigo-500{% endif %}">Timeline</a>
+                        <a href="/reports" class="text-sm font-medium text-gray-500 hover:text-gray-900 {% if active_page == 'reports' %}text-gray-900 border-b-2 border-indigo-500{% endif %}">Reports</a>
+                        <a href="/screenshots" class="text-sm font-medium text-gray-500 hover:text-gray-900 {% if active_page == 'screenshots' %}text-gray-900 border-b-2 border-indigo-500{% endif %}">Screenshots</a>
+                        <a href="/settings" class="text-sm font-medium text-gray-500 hover:text-gray-900 {% if active_page == 'settings' %}text-gray-900 border-b-2 border-indigo-500{% endif %}">Settings</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Screenshots - Life Optimizer{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900">Screenshot Gallery</h1>
+        <div class="flex items-center space-x-3">
+            <label for="screenshot-date" class="text-sm font-medium text-gray-700">Date:</label>
+            <input type="date" id="screenshot-date" value="{{ today }}"
+                   class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm px-3 py-1.5 border"
+                   onchange="updateScreenshots()">
+        </div>
+    </div>
+
+    <div id="screenshot-gallery"
+         hx-get="/screenshots/gallery?date={{ today }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-center py-8 text-gray-500">Loading screenshots...</div>
+    </div>
+</div>
+
+<!-- Full-size modal -->
+<div id="screenshot-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-75"
+     onclick="closeModal(event)">
+    <div class="max-w-5xl max-h-[90vh] p-2">
+        <img id="modal-image" src="" alt="Screenshot" class="max-w-full max-h-[85vh] rounded shadow-lg">
+        <p id="modal-caption" class="text-white text-center mt-2 text-sm"></p>
+    </div>
+</div>
+
+<script>
+function updateScreenshots() {
+    const date = document.getElementById('screenshot-date').value;
+    const container = document.getElementById('screenshot-gallery');
+    container.setAttribute('hx-get', '/screenshots/gallery?date=' + date);
+    htmx.trigger(container, 'load');
+}
+
+function openModal(url, caption) {
+    const modal = document.getElementById('screenshot-modal');
+    document.getElementById('modal-image').src = url;
+    document.getElementById('modal-caption').textContent = caption;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeModal(event) {
+    if (event.target === document.getElementById('screenshot-modal')) {
+        const modal = document.getElementById('screenshot-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+</script>
+{% endblock %}

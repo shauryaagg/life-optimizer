@@ -1,0 +1,31 @@
+{% if screenshots %}
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    {% for s in screenshots %}
+    <div class="relative group cursor-pointer rounded-lg overflow-hidden shadow-sm bg-white"
+         onclick="openModal('{{ s.url }}', '{{ s.timestamp }} - {{ s.app_name }}')">
+        {% if s.exists %}
+        <img src="{{ s.url }}" alt="Screenshot at {{ s.timestamp }}"
+             class="w-full h-40 object-cover" loading="lazy">
+        {% else %}
+        <div class="w-full h-40 bg-gray-200 flex items-center justify-center">
+            <span class="text-xs text-gray-400">File not found</span>
+        </div>
+        {% endif %}
+        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-end">
+            <div class="w-full p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <p class="text-white text-xs font-medium truncate">{{ s.app_name }}</p>
+                <p class="text-white/75 text-xs">{{ s.timestamp[11:19] if s.timestamp|length > 19 else s.timestamp }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12">
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+    <p class="mt-2 text-sm text-gray-500">No screenshots for this date.</p>
+    <p class="text-xs text-gray-400">Screenshots will appear here once the daemon is capturing.</p>
+</div>
+{% endif %}

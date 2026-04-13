@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Life Optimizer{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+
+    <!-- Storage Stats -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Storage Statistics</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-indigo-600">{{ event_count }}</p>
+                <p class="text-sm text-gray-500">Total Events</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-indigo-600">{{ screenshot_count }}</p>
+                <p class="text-sm text-gray-500">Screenshots</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-indigo-600">{{ db_size_mb }} MB</p>
+                <p class="text-sm text-gray-500">Database Size</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4 text-center">
+                <p class="text-2xl font-bold text-indigo-600">{{ screenshot_size_mb }} MB</p>
+                <p class="text-sm text-gray-500">Screenshot Storage</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permissions -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Permission Status</h2>
+        <div class="space-y-3">
+            {% for name, granted in permissions.items() %}
+            <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                <span class="text-sm font-medium text-gray-700 capitalize">{{ name | replace("_", " ") }}</span>
+                {% if granted %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Granted</span>
+                {% else %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Not Granted</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Configuration (Read-Only)</h2>
+        <div class="space-y-4">
+            <!-- Daemon -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">Daemon</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm space-y-1">
+                    <div class="flex justify-between"><span class="text-gray-500">Poll Interval</span><span class="text-gray-900">{{ config.daemon.poll_interval }}s</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Idle Threshold</span><span class="text-gray-900">{{ config.daemon.idle_threshold }}s</span></div>
+                </div>
+            </div>
+            <!-- Collectors -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">Collectors</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm">
+                    <span class="text-gray-500">Enabled:</span>
+                    <span class="text-gray-900">{{ config.collectors.enabled | join(", ") }}</span>
+                </div>
+            </div>
+            <!-- Storage -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">Storage</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">DB Path</span><span class="text-gray-900">{{ config.storage.db_path }}</span></div>
+                </div>
+            </div>
+            <!-- Screenshots -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">Screenshots</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm space-y-1">
+                    <div class="flex justify-between"><span class="text-gray-500">Enabled</span><span class="text-gray-900">{{ config.screenshots.enabled }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Interval</span><span class="text-gray-900">{{ config.screenshots.interval }}s</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Quality</span><span class="text-gray-900">{{ config.screenshots.quality }}%</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Scale</span><span class="text-gray-900">{{ config.screenshots.scale }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Retention</span><span class="text-gray-900">{{ config.screenshots.retention_days }} days</span></div>
+                </div>
+            </div>
+            <!-- LLM -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">LLM</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm space-y-1">
+                    <div class="flex justify-between"><span class="text-gray-500">Provider</span><span class="text-gray-900">{{ config.llm.provider }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Claude Model</span><span class="text-gray-900">{{ config.llm.claude_model }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Batch Interval</span><span class="text-gray-900">{{ config.llm.batch_interval }}s</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Daily Insight</span><span class="text-gray-900">{{ config.llm.daily_insight_time }}</span></div>
+                </div>
+            </div>
+            <!-- Dashboard -->
+            <div>
+                <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">Dashboard</h3>
+                <div class="bg-gray-50 rounded p-3 text-sm space-y-1">
+                    <div class="flex justify-between"><span class="text-gray-500">Host</span><span class="text-gray-900">{{ config.dashboard.host }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Port</span><span class="text-gray-900">{{ config.dashboard.port }}</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

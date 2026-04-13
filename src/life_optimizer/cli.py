@@ -196,5 +196,20 @@ def cmd_stop():
 
 
 def cmd_dashboard():
-    """Placeholder for web dashboard."""
-    print("Dashboard not yet implemented (coming in Phase 5)")
+    """Start the web dashboard."""
+    import webbrowser
+
+    import uvicorn
+
+    from life_optimizer.config import load_config
+    from life_optimizer.dashboard.app import create_app
+
+    config = load_config()
+    host = config.dashboard.host
+    port = config.dashboard.port
+
+    app = create_app(config)
+
+    print(f"Starting dashboard at http://{host}:{port}")
+    webbrowser.open(f"http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="info")
