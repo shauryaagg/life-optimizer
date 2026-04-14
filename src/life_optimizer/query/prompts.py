@@ -31,10 +31,25 @@ DATETIME HANDLING (IMPORTANT — SQLite-specific syntax):
 - For "yesterday": WHERE date(timestamp, 'localtime') = date('now', '-1 day', 'localtime')
 - For a time range: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'utc') AND timestamp < datetime('now', 'start of day', 'utc')
 
+TABLE GUIDANCE — read this before writing queries:
+- `events` table: individual activity data points polled every 2 seconds.
+  duration_seconds on events is ALMOST ALWAYS NULL — do not use it for totals.
+  Use events for: counting activity, listing what happened, grouping by app/category.
+- `sessions` table: continuous blocks of same-app usage with start_time,
+  end_time, duration_seconds, category. Use sessions for: "how much time",
+  "total time on X", any duration/time-spent question.
+- `summaries` table: hourly/daily LLM-generated summaries. Use for high-level
+  "what happened this hour/day" questions.
+
+EXAMPLES of good queries:
+- "how much deep work today" → SUM duration FROM sessions WHERE category='Deep Work' AND date(start_time,'localtime')=date('now','localtime')
+- "what apps did I use today" → SELECT DISTINCT app_name FROM events WHERE date(timestamp,'localtime')=date('now','localtime')
+- "total time on chrome" → SUM duration_seconds FROM sessions WHERE app_name='Google Chrome'
+
 DATA NOTES:
 - category values: Deep Work, Communication, Browsing, Social Media, Entertainment, Planning, Learning, Personal, Other.
-- context_json is a JSON string that may contain url, title, and other fields. Use json_extract(context_json, '$.url').
-- duration_seconds may be NULL. Use COALESCE(duration_seconds, 0) for aggregation.
+- context_json is a JSON string (events table) that may contain url, title. Use json_extract(context_json, '$.url').
+- events.duration_seconds is usually NULL. Always prefer the sessions table for duration queries.
 
 Respond with ONLY the SQL query. No markdown fences, no explanation."""
 

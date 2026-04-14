@@ -438,13 +438,18 @@ class SessionRepository:
             event_count: Number of events recorded during this session.
         """
         conn = self._db.connection
-        # Compute duration from start_time
+        # Compute duration from start_time, and find the most-common category
+        # from the events that occurred during this session's time window.
         cursor = await conn.execute(
-            "SELECT start_time FROM sessions WHERE id = ?", (session_id,)
+            "SELECT start_time, app_name FROM sessions WHERE id = ?", (session_id,)
         )
         row = await cursor.fetchone()
         duration = None
+        session_start = None
+        session_app = None
         if row and row[0]:
+            session_start = row[0]
+            session_app = row[1] if len(row) > 1 else None
             try:
                 start_dt = datetime.fromisoformat(row[0])
                 end_dt = datetime.fromisoformat(end_time)
@@ -452,16 +457,39 @@ class SessionRepository:
             except (ValueError, TypeError):
                 pass
 
+        # Pick the most-common category from events in this session's window
+        category = None
+        if session_start and session_app:
+            cat_cursor = await conn.execute(
+                """
+                SELECT category, COUNT(*) as c
+                FROM events
+                WHERE app_name = ?
+                  AND timestamp >= ? AND timestamp <= ?
+                  AND category IS NOT NULL
+                GROUP BY category
+                ORDER BY c DESC
+                LIMIT 1
+                """,
+                (session_app, session_start, end_time),
+            )
+            cat_row = await cat_cursor.fetchone()
+            if cat_row:
+                category = cat_row[0]
+
         await conn.execute(
             """
             UPDATE sessions
-            SET end_time = ?, duration_seconds = ?, event_count = ?
+            SET end_time = ?, duration_seconds = ?, event_count = ?, category = ?
             WHERE id = ?
             """,
-            (end_time, duration, event_count, session_id),
+            (end_time, duration, event_count, category, session_id),
         )
         await conn.commit()
-        logger.debug("Ended session id=%d, duration=%.1fs", session_id, duration or 0)
+        logger.debug(
+            "Ended session id=%d, duration=%.1fs, category=%s",
+            session_id, duration or 0, category or "(none)"
+        )
 
     async def get_sessions(self, date: str | None = None) -> list[Session]:
         """Retrieve sessions with optional date filtering.
