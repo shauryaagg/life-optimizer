@@ -1,16 +1,43 @@
+{% set category_colors = {
+    'Deep Work': '#10b981',
+    'Communication': '#3b82f6',
+    'Browsing': '#8b5cf6',
+    'Social Media': '#ef4444',
+    'Entertainment': '#f59e0b',
+    'Planning': '#06b6d4',
+    'Learning': '#84cc16',
+    'Personal': '#ec4899',
+    'Development': '#10b981',
+    'Productivity': '#06b6d4',
+    'Other': '#9ca3af'
+} %}
 {% if days_data %}
 {% for day in days_data %}
 <div class="mb-4">
     <div class="text-sm font-medium text-gray-700 mb-1">{{ day.date }}</div>
-    <div class="relative bg-gray-50 rounded h-8 border border-gray-200" style="min-width: 100%;">
+    <div class="relative bg-gray-50 rounded h-8 border border-gray-200">
         {% for session in day.sessions %}
-        {% if session.start_time and session.duration_seconds %}
-        <div class="absolute h-full rounded opacity-80 hover:opacity-100 cursor-pointer session-bar"
-             title="{{ session.app_name }} | {{ session.start_time }} - {{ session.end_time or '?' }} | {{ ((session.duration_seconds or 0) / 60)|round(1) }}min"
-             style="left: {{ ((session.start_time[:2]|int * 60 + session.start_time[3:5]|int - 360) / (1080)) * 100 }}%; width: {{ ((session.duration_seconds or 0) / 64800) * 100 }}%; background: {% if session.category == 'deep_work' %}#10b981{% elif session.category == 'communication' %}#3b82f6{% elif session.category == 'browsing' %}#8b5cf6{% elif session.category == 'social_media' %}#ef4444{% elif session.category == 'entertainment' %}#f59e0b{% elif session.category == 'planning' %}#06b6d4{% elif session.category == 'learning' %}#84cc16{% elif session.category == 'personal' %}#ec4899{% else %}#6b7280{% endif %};">
+        {% if session.start_time %}
+        {% set start_hour = session.start_time[:2]|int %}
+        {% set start_min = session.start_time[3:5]|int %}
+        {% set start_pct = ((start_hour * 60 + start_min) / 1440) * 100 %}
+        {% set dur = session.duration_seconds or 60 %}
+        {% set width_pct = (dur / 86400) * 100 %}
+        {% if width_pct < 0.3 %}{% set width_pct = 0.3 %}{% endif %}
+        {% set color = category_colors.get(session.category, '#9ca3af') %}
+        <div class="absolute h-full rounded-sm hover:opacity-90 cursor-pointer"
+             title="{{ session.app_name }} | {{ session.category or 'Uncategorized' }} | {{ session.start_time }} - {{ session.end_time or '…' }} | {{ ((dur or 0) / 60)|round(1) }} min"
+             style="left: {{ start_pct }}%; width: {{ width_pct }}%; background: {{ color }}; opacity: 0.85;">
         </div>
         {% endif %}
         {% endfor %}
+    </div>
+    <div class="relative text-xs text-gray-500 mt-1" style="height: 1em;">
+        <span style="position: absolute; left: 0%">00</span>
+        <span style="position: absolute; left: 25%">06</span>
+        <span style="position: absolute; left: 50%">12</span>
+        <span style="position: absolute; left: 75%">18</span>
+        <span style="position: absolute; left: 100%; transform: translateX(-100%)">24</span>
     </div>
 </div>
 {% endfor %}

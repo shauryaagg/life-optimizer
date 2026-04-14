@@ -36,7 +36,7 @@ screenshots:
   retention_days: 30
 
 llm:
-  provider: ollama
+  provider: claude-code
   claude:
     model: claude-sonnet-4-6
     api_key_env: ANTHROPIC_API_KEY

@@ -216,7 +216,7 @@ class InsightGenerator:
             summary_text=insights_text,
             category_breakdown=json.dumps(category_counts),
             top_activities=json.dumps(top_apps),
-            insights=insights_text,
+            insights=None,  # Daily summary IS the insights; avoid duplicate display
             model_used=model_used,
         )
 

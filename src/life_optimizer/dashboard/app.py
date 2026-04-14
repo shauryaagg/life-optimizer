@@ -70,8 +70,24 @@ def create_app(config: Config) -> FastAPI:
     def to_local_datetime(iso_str: str | None) -> str:
         return to_local_time(iso_str, "%Y-%m-%d %H:%M:%S")
 
+    # Markdown renderer — LLMs emit markdown (headers, tables, lists, bold).
+    # markdown-it-py is already a transitive dep.
+    _md_renderer = None
+    def render_markdown(text: str | None) -> str:
+        nonlocal _md_renderer
+        if not text:
+            return ""
+        if _md_renderer is None:
+            try:
+                from markdown_it import MarkdownIt
+                _md_renderer = MarkdownIt("commonmark", {"html": False, "linkify": True, "breaks": True}).enable("table").enable("strikethrough")
+            except ImportError:
+                return text.replace("\n", "<br>")
+        return _md_renderer.render(text)
+
     templates.env.filters["local_time"] = to_local_time
     templates.env.filters["local_datetime"] = to_local_datetime
+    templates.env.filters["markdown"] = render_markdown
     app.state.templates = templates
 
     # CORS - localhost only
