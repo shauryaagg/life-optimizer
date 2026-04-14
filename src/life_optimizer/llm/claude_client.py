@@ -105,6 +105,14 @@ class ClaudeCodeClient(BaseLLMClient):
         # Claude Code's session hooks need `node`, which is typically in
         # /opt/homebrew/bin or ~/.nvm/ but not in the daemon's inherited PATH.
         env = dict(os.environ)
+
+        # CRITICAL: remove ANTHROPIC_API_KEY from the environment.
+        # If present, Claude Code uses it (API-key / pay-as-you-go mode)
+        # instead of the user's Max subscription OAuth token. Max users
+        # expect their subscription quota to be used, not API credits.
+        env.pop("ANTHROPIC_API_KEY", None)
+        env.pop("ANTHROPIC_AUTH_TOKEN", None)
+
         home = str(Path.home())
         extra_paths = [
             "/opt/homebrew/bin",
