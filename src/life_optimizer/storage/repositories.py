@@ -624,9 +624,16 @@ class SummaryRepository:
             conditions.append("period_type = ?")
             params.append(period_type)
         if date:
+            # Summaries store period_start as either a naive `YYYY-MM-DDT00:00:00`
+            # (calendar-day start) for daily summaries, or a timezone-aware
+            # timestamp for hourly ones. Match EITHER the date prefix (catches
+            # naive daily summaries) OR the UTC-range (catches hourly
+            # timestamps that fell on this local day).
             utc_start, utc_end = _local_date_utc_range(date)
-            conditions.append("period_start >= ? AND period_start <= ?")
-            params.extend([utc_start, utc_end])
+            conditions.append(
+                "(period_start LIKE ? OR (period_start >= ? AND period_start <= ?))"
+            )
+            params.extend([f"{date}%", utc_start, utc_end])
 
         where = ""
         if conditions:
