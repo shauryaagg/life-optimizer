@@ -1,13 +1,22 @@
-"""Screenshot capture using macOS screencapture and Pillow for compression."""
+"""Screenshot capture has been moved to the Swift macOS app.
+
+The Swift app is the only TCC principal with Screen Recording permission.
+Calling screencapture from this Python process would trigger a macOS
+permission dialog every time, because the Python process has a different
+code signature / identity than the Swift app.
+
+This module is kept as a stub so existing imports don't break. It returns
+None on every capture call, disabling Python-side screenshots entirely.
+The Swift app at macos-app/Sources/LifeOptimizer/Screenshots/ScreenshotCapture.swift
+handles all screenshot capture using CGWindowListCreateImage with the
+app's native TCC permission.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -26,87 +35,19 @@ class ScreenshotResult:
 
 
 class ScreenshotCapture:
-    """Captures screenshots using macOS screencapture, then compresses with Pillow."""
+    """Disabled — the Swift app handles screenshot capture.
 
-    def __init__(
-        self,
-        base_dir: str = "data/screenshots",
-        quality: int = 60,
-        scale: float = 0.5,
-    ):
-        self._base_dir = Path(base_dir)
+    All methods return None to make the daemon explicitly inert with respect
+    to screen recording. The Swift app writes JPEGs directly to
+    data/screenshots/YYYY-MM-DD/ and the dashboard lists files from disk.
+    """
+
+    def __init__(self, base_dir: str = "data/screenshots", quality: int = 60, scale: float = 0.5):
+        # Kept for API compatibility; arguments are ignored
+        self._base_dir = base_dir
         self._quality = quality
         self._scale = scale
 
-    def _build_path(self, app_name: str, ts: datetime) -> Path:
-        """Build the output file path: base/YYYY-MM-DD/HHMMSS_appname.jpg."""
-        date_str = ts.strftime("%Y-%m-%d")
-        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", app_name).lower()
-        filename = f"{ts.strftime('%H%M%S')}_{safe_name}.jpg"
-        return self._base_dir / date_str / filename
-
     async def capture(self, app_name: str, trigger: str) -> ScreenshotResult | None:
-        """Capture a screenshot, resize and compress it.
-
-        Args:
-            app_name: Name of the current frontmost application.
-            trigger: Reason the screenshot was taken (e.g. "app_switch", "interval").
-
-        Returns:
-            ScreenshotResult with file details, or None on failure.
-        """
-        try:
-            ts = datetime.now(timezone.utc)
-            out_path = self._build_path(app_name, ts)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Capture raw screenshot to a temp path
-            raw_path = out_path.with_suffix(".raw.png")
-            proc = await asyncio.create_subprocess_exec(
-                "screencapture", "-x", "-t", "png", str(raw_path),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await asyncio.wait_for(proc.communicate(), timeout=10.0)
-
-            if proc.returncode != 0 or not raw_path.exists():
-                logger.warning("screencapture failed (rc=%s)", proc.returncode)
-                return None
-
-            # Resize and compress with Pillow
-            from PIL import Image
-
-            with Image.open(raw_path) as img:
-                # macOS screencapture produces RGBA PNGs; JPEG needs RGB
-                if img.mode in ("RGBA", "LA", "P"):
-                    img = img.convert("RGB")
-                new_w = int(img.width * self._scale)
-                new_h = int(img.height * self._scale)
-                resized = img.resize((new_w, new_h), Image.LANCZOS)
-                resized.save(str(out_path), "JPEG", quality=self._quality)
-
-            # Clean up raw file
-            raw_path.unlink(missing_ok=True)
-
-            file_size = out_path.stat().st_size
-
-            # Get dimensions of final file
-            with Image.open(out_path) as final_img:
-                width, height = final_img.size
-
-            return ScreenshotResult(
-                file_path=str(out_path),
-                timestamp=ts,
-                file_size_bytes=file_size,
-                width=width,
-                height=height,
-                app_name=app_name,
-                trigger_reason=trigger,
-            )
-
-        except asyncio.TimeoutError:
-            logger.warning("screencapture timed out")
-            return None
-        except Exception as e:
-            logger.warning("Screenshot capture failed: %s", e)
-            return None
+        """Disabled. Swift app handles screen recording."""
+        return None

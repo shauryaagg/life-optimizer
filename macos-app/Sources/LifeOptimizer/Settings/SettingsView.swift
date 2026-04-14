@@ -73,6 +73,8 @@ struct LLMSettingsView: View {
     @AppStorage("llmProvider") var llmProvider: String = "claude"
     @State private var apiKey: String = ""
     @State private var saveStatus: String?
+    @StateObject private var ollama = OllamaManager()
+    @State private var ollamaBusy = false
 
     var body: some View {
         Form {
@@ -80,6 +82,17 @@ struct LLMSettingsView: View {
                 Picker("Provider", selection: $llmProvider) {
                     Text("Claude (Anthropic)").tag("claude")
                     Text("Ollama (Local)").tag("ollama")
+                    Text("None (Rule-based only)").tag("none")
+                }
+                .onChange(of: llmProvider) { newValue in
+                    // Auto-install/start Ollama when user switches to it in Settings
+                    if newValue == "ollama" {
+                        ollamaBusy = true
+                        Task {
+                            await ollama.ensureReady(installModel: true)
+                            ollamaBusy = false
+                        }
+                    }
                 }
             } header: {
                 Text("AI Provider")
@@ -111,9 +124,55 @@ struct LLMSettingsView: View {
 
             if llmProvider == "ollama" {
                 Section {
-                    Text("Make sure Ollama is running on http://localhost:11434")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if ollamaBusy {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text(ollama.message)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        if ollama.progress > 0 {
+                            ProgressView(value: ollama.progress)
+                        }
+                    } else if ollama.status == .ready {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Ollama is running with llama3.1:8b")
+                                .font(.caption)
+                        }
+                    } else if !ollama.isInstalled() {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Ollama is not installed.")
+                                .font(.caption)
+                            Button("Install Ollama") {
+                                ollamaBusy = true
+                                Task {
+                                    await ollama.ensureReady(installModel: true)
+                                    ollamaBusy = false
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Ollama is installed.")
+                                .font(.caption)
+                            Button("Start Ollama & pull model") {
+                                ollamaBusy = true
+                                Task {
+                                    await ollama.ensureReady(installModel: true)
+                                    ollamaBusy = false
+                                }
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+                    if let err = ollama.error {
+                        Text("Error: \(err)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 } header: {
                     Text("Ollama")
                 }

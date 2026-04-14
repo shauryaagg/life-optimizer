@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import CoreGraphics
 
 /// Application delegate — owns ALL startup logic.
 /// MenuBarExtra.onAppear only fires on click, so we drive everything from here.
@@ -18,7 +19,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var workspaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Install the menubar status item FIRST (always visible)
+        // Clean up stale TCC grants on launch.
+        //
+        // Ad-hoc signed binaries change their code hash on every rebuild.
+        // macOS TCC keys grants by hash, so after rebuild the grant for the
+        // OLD hash is still in System Settings (showing "Life Optimizer" as
+        // allowed) but the new hash has no grant — and the user can't re-grant
+        // because Settings shows it's already on.
+        //
+        // `tccutil reset` removes the stale entry. After reset, next capture
+        // attempt triggers a fresh, clean permission prompt.
+        //
+        // We only do this if the CURRENT binary doesn't have a grant
+        // (CGPreflightScreenCaptureAccess == false). If the current binary
+        // has a valid grant, we don't touch anything.
+        resetStaleTCCIfNeeded()
+
+        // Set activation policy FIRST — must be done before any UI or the
+        // status bar subsystem may not render properly
+        if setupManager.isSetupComplete {
+            NSApp.setActivationPolicy(.accessory)
+        } else {
+            NSApp.setActivationPolicy(.regular)
+        }
+
+        // Install menubar status item (after activation policy is set)
         statusItemManager.install(appDelegate: self)
 
         // Create spotlight panel (hidden initially)
@@ -29,12 +54,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.toggleSpotlightPanel()
         }
 
-        // Decide: show onboarding or start daemon
+        // Start appropriate flow
         if setupManager.isSetupComplete {
-            NSApp.setActivationPolicy(.accessory)
             startTracking()
         } else {
-            NSApp.setActivationPolicy(.regular)
             showSetupWindow()
         }
     }
@@ -111,5 +134,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func toggleSpotlightPanel() {
         spotlightPanel?.toggle()
+    }
+
+    // MARK: - TCC Cleanup
+
+    /// If the current binary has no Screen Recording grant, reset stale TCC
+    /// entries so System Settings doesn't show "already granted" incorrectly.
+    private func resetStaleTCCIfNeeded() {
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.lifeoptimizer.app"
+
+        // If preflight returns true, we DO have a grant — don't touch anything
+        if CGPreflightScreenCaptureAccess() {
+            NSLog("[TCC] Screen Recording grant is valid, no cleanup needed")
+            return
+        }
+
+        NSLog("[TCC] No valid Screen Recording grant — clearing stale TCC entries")
+
+        // tccutil reset <service> <bundle-id> removes the stale entry so the
+        // next permission prompt shows fresh and System Settings reflects
+        // actual state.
+        for service in ["ScreenCapture", "Accessibility"] {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+            task.arguments = ["reset", service, bundleID]
+            task.standardOutput = Pipe()
+            task.standardError = Pipe()
+            do {
+                try task.run()
+                task.waitUntilExit()
+                NSLog("[TCC] Reset \(service) for \(bundleID): exit \(task.terminationStatus)")
+            } catch {
+                NSLog("[TCC] Failed to reset \(service): \(error)")
+            }
+        }
     }
 }

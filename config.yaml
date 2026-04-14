@@ -36,12 +36,12 @@ screenshots:
   retention_days: 30
 
 llm:
-  provider: claude
+  provider: ollama
   claude:
     model: claude-sonnet-4-20250514
     api_key_env: ANTHROPIC_API_KEY
   ollama:
-    model: llama3.1:8b
+    model: qwen3.5:4b
     base_url: http://localhost:11434
   batch_interval: 3600
   daily_insight_time: "22:00"

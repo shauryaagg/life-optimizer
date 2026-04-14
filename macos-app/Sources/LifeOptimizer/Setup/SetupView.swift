@@ -297,6 +297,8 @@ struct LLMSetupStepView: View {
     @ObservedObject var setupManager: SetupManager
     @AppStorage("llmProvider") var llmProvider: String = "claude"
     @State private var apiKey: String = ""
+    @StateObject private var ollamaManager = OllamaManager()
+    @State private var ollamaBusy = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -330,9 +332,40 @@ struct LLMSetupStepView: View {
                 }
                 .padding(.horizontal, 24)
             } else if llmProvider == "ollama" {
-                Text("Make sure Ollama is running at localhost:11434.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    if ollamaBusy {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text(ollamaManager.message)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        if ollamaManager.progress > 0 {
+                            ProgressView(value: ollamaManager.progress)
+                        }
+                    } else if ollamaManager.status == .ready {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Ollama is ready with llama3.1:8b")
+                                .font(.caption)
+                        }
+                    } else if ollamaManager.isInstalled() {
+                        Text("Ollama is installed. We'll start it and pull llama3.1:8b when you click Continue.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Ollama is not installed. We'll download and install it for you when you click Continue.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    if let err = ollamaManager.error {
+                        Text("Error: \(err)")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                }
+                .padding(.horizontal, 24)
             } else {
                 Text("Activity tracking works without AI. Enable it later in Settings.")
                     .font(.caption)
@@ -344,14 +377,30 @@ struct LLMSetupStepView: View {
             HStack {
                 Button("Back") { setupManager.previousStep() }
                     .buttonStyle(.bordered)
+                    .disabled(ollamaBusy)
                 Spacer()
-                Button("Continue") {
-                    if llmProvider == "claude" && !apiKey.isEmpty {
-                        setupManager.saveAPIKey(apiKey)
+                Button(ollamaBusy ? "Installing..." : "Continue") {
+                    if llmProvider == "claude" {
+                        if !apiKey.isEmpty {
+                            setupManager.saveAPIKey(apiKey)
+                        }
+                        setupManager.nextStep()
+                    } else if llmProvider == "ollama" {
+                        // Auto-install and/or start Ollama
+                        ollamaBusy = true
+                        Task {
+                            await ollamaManager.ensureReady(installModel: true)
+                            ollamaBusy = false
+                            if ollamaManager.error == nil {
+                                setupManager.nextStep()
+                            }
+                        }
+                    } else {
+                        setupManager.nextStep()
                     }
-                    setupManager.nextStep()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(ollamaBusy)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 24)

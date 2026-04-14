@@ -27,39 +27,63 @@ async def screenshots_page(request: Request):
 
 @router.get("/screenshots/gallery", response_class=HTMLResponse)
 async def screenshots_gallery(request: Request, date: str | None = None):
-    """HTMX partial: screenshot grid for a given date."""
+    """HTMX partial: screenshot grid for a given date.
+
+    Screenshots are captured by the Swift menubar app (which uses its own
+    Screen Recording permission) and written directly to disk. We list files
+    in the dated directory, falling back to database records for metadata.
+    """
+    from datetime import date as date_cls
     if date is None:
-        from datetime import date as date_cls
         date = date_cls.today().isoformat()
 
-    db = request.app.state.db
-    repo = ScreenshotRepository(db)
-    screenshots = await repo.get_screenshots(date=date, limit=100)
-
-    # Build URL-safe paths for each screenshot
     screenshots_dir = Path(request.app.state.config.storage.db_path).parent / "screenshots"
-    screenshot_data = []
-    for s in screenshots:
-        file_path = Path(s.file_path)
-        # Try to make the path relative to the screenshots directory
-        try:
-            rel_path = file_path.relative_to(screenshots_dir)
-            url = f"/screenshots-static/{rel_path}"
-        except ValueError:
-            # If not relative, use the filename
-            url = f"/screenshots-static/{file_path.name}"
+    day_dir = screenshots_dir / date
 
-        exists = file_path.exists()
-        screenshot_data.append(
-            {
-                "id": s.id,
-                "timestamp": s.timestamp,
-                "app_name": s.app_name,
-                "window_title": s.window_title,
-                "url": url,
-                "exists": exists,
-            }
+    screenshot_data = []
+    if day_dir.is_dir():
+        # List JPEG files sorted by newest first
+        files = sorted(
+            (p for p in day_dir.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
         )
+        for fp in files[:100]:
+            # Parse filename: HHMMSS_appname.jpg
+            name = fp.stem
+            parts = name.split("_", 1)
+            time_str = parts[0] if len(parts) == 2 else ""
+            app_name = parts[1].replace("_", " ").title() if len(parts) == 2 else name
+
+            # Build ISO timestamp with local timezone offset so the
+            # template's local_time filter converts correctly.
+            if len(time_str) == 6 and time_str.isdigit():
+                from datetime import datetime as dt_cls
+                try:
+                    y, m, d = [int(p) for p in date.split("-")]
+                    hh = int(time_str[0:2]); mm = int(time_str[2:4]); ss = int(time_str[4:6])
+                    local_tz = dt_cls.now().astimezone().tzinfo
+                    naive = dt_cls(y, m, d, hh, mm, ss, tzinfo=local_tz)
+                    ts = naive.isoformat()
+                except Exception:
+                    ts = f"{date}T{time_str[0:2]}:{time_str[2:4]}:{time_str[4:6]}"
+            else:
+                ts = ""
+
+            try:
+                rel_path = fp.relative_to(screenshots_dir)
+                url = f"/screenshots-static/{rel_path}"
+            except ValueError:
+                url = f"/screenshots-static/{fp.name}"
+
+            screenshot_data.append({
+                "id": 0,
+                "timestamp": ts,
+                "app_name": app_name,
+                "window_title": "",
+                "url": url,
+                "exists": True,
+            })
 
     templates = request.app.state.templates
     return templates.TemplateResponse(

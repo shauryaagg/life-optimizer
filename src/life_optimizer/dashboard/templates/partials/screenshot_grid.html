@@ -2,7 +2,7 @@
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
     {% for s in screenshots %}
     <div class="relative group cursor-pointer rounded-lg overflow-hidden shadow-sm bg-white"
-         onclick="openModal('{{ s.url }}', '{{ s.timestamp }} - {{ s.app_name }}')">
+         onclick="openModal('{{ s.url }}', '{{ s.timestamp | local_datetime }} - {{ s.app_name }}')">
         {% if s.exists %}
         <img src="{{ s.url }}" alt="Screenshot at {{ s.timestamp }}"
              class="w-full h-40 object-cover" loading="lazy">
@@ -14,7 +14,7 @@
         <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 flex items-end">
             <div class="w-full p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                 <p class="text-white text-xs font-medium truncate">{{ s.app_name }}</p>
-                <p class="text-white/75 text-xs">{{ s.timestamp[11:19] if s.timestamp|length > 19 else s.timestamp }}</p>
+                <p class="text-white/75 text-xs">{{ s.timestamp | local_time }}</p>
             </div>
         </div>
     </div>

@@ -46,8 +46,32 @@ def create_app(config: Config) -> FastAPI:
     app.state.config = config
     app.state.db = db
 
-    # Templates
+    # Templates with custom filters for local timezone display
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+    from datetime import datetime, timezone
+
+    def to_local_time(iso_str: str | None, fmt: str = "%H:%M:%S") -> str:
+        """Parse an ISO timestamp (assumed UTC if no tz) and format in local time."""
+        if not iso_str:
+            return ""
+        try:
+            # Python's fromisoformat handles "+00:00" but not "Z"
+            s = iso_str.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+            # If no tzinfo, assume UTC (the daemon stores UTC)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            # Convert to the system's local timezone
+            return dt.astimezone().strftime(fmt)
+        except (ValueError, TypeError):
+            return iso_str
+
+    def to_local_datetime(iso_str: str | None) -> str:
+        return to_local_time(iso_str, "%Y-%m-%d %H:%M:%S")
+
+    templates.env.filters["local_time"] = to_local_time
+    templates.env.filters["local_datetime"] = to_local_datetime
     app.state.templates = templates
 
     # CORS - localhost only

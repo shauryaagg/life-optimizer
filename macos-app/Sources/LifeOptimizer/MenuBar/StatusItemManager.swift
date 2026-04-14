@@ -14,19 +14,31 @@ class StatusItemManager: ObservableObject {
 
     func install(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
+        debugLog("[StatusItem] install() called")
 
-        // Create the status item
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Create the status item with fixed length to ensure visibility
+        let item = NSStatusBar.system.statusItem(withLength: 30)
         statusItem = item
+        // autosaveName persists the position across launches and asks macOS
+        // to prefer this placement — helps avoid being pushed into the notch
+        // dead zone on MacBooks with many status items.
+        item.autosaveName = "com.lifeoptimizer.app.statusitem"
+        item.behavior = [.removalAllowed]
+        debugLog("[StatusItem] created, button=\(item.button != nil)")
 
-        // Set initial icon
-        updateIcon()
-
-        // Configure button action
+        // Configure button FIRST
         if let button = item.button {
             button.action = #selector(togglePopover(_:))
             button.target = self
+            // Force a visible text label — guaranteed to render
+            button.title = "LO"
+            button.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+            button.imagePosition = .imageLeft
+            debugLog("[StatusItem] button configured, title='\(button.title)', frame=\(button.frame)")
         }
+
+        // Set icon after button is configured
+        updateIcon()
 
         // Setup popover with menu content
         let popover = NSPopover()
@@ -60,35 +72,21 @@ class StatusItemManager: ObservableObject {
     }
 
     private func updateIcon() {
-        guard let button = statusItem?.button else { return }
+        guard let button = statusItem?.button else {
+            debugLog("[StatusItem.updateIcon] NO BUTTON — bailing")
+            return
+        }
         let isRunning = appDelegate?.daemonManager.isRunning ?? false
 
-        // Try multiple SF Symbol names that should exist on macOS 13+
-        let symbolCandidates = ["target", "viewfinder", "circle.dashed", "circle", "record.circle"]
-        var symbolImage: NSImage?
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
-
-        for name in symbolCandidates {
-            if let img = NSImage(systemSymbolName: name, accessibilityDescription: "Life Optimizer") {
-                symbolImage = img.withSymbolConfiguration(config)
-                break
-            }
-        }
-
-        if let image = symbolImage {
-            image.isTemplate = true
-            button.image = image
-            button.title = ""
-        } else {
-            // Fallback to text - guaranteed to show something
-            button.image = nil
-            button.title = "◎"
-            button.font = NSFont.systemFont(ofSize: 16, weight: .medium)
-        }
+        // Keep text-only for now — proven to render reliably
+        button.title = "LO"
+        button.image = nil
 
         button.toolTip = isRunning
             ? "Life Optimizer — tracking"
             : "Life Optimizer — click to start"
+
+        debugLog("[StatusItem.updateIcon] title='\(button.title)', image=\(button.image != nil), frame=\(button.frame), isHidden=\(button.isHidden), alphaValue=\(button.alphaValue)")
     }
 
     @objc private func togglePopover(_ sender: AnyObject?) {

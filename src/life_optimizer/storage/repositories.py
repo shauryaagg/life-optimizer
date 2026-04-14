@@ -4,7 +4,29 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+
+def _local_date_utc_range(date_str: str) -> tuple[str, str]:
+    """Convert a local-timezone date (YYYY-MM-DD) to its UTC ISO range.
+
+    Events are stored as UTC ISO timestamps, but users think in local time.
+    A "day" in local time spans a UTC range that doesn't align with a UTC
+    calendar day, so filtering by timestamp LIKE 'YYYY-MM-DD%' misses events
+    that happened today locally but are stored with tomorrow's UTC date.
+
+    Returns (start_utc_iso, end_utc_iso) such that any event timestamp in
+    [start_utc_iso, end_utc_iso] occurred on the local date `date_str`.
+    """
+    y, m, d = [int(p) for p in date_str.split("-")]
+    # Build naive local datetimes at start/end of the requested local day,
+    # then attach the system's local tzinfo via astimezone() on an aware dt.
+    local_tz = datetime.now().astimezone().tzinfo
+    local_start = datetime(y, m, d, 0, 0, 0, tzinfo=local_tz)
+    local_end = datetime(y, m, d, 23, 59, 59, 999999, tzinfo=local_tz)
+    utc_start = local_start.astimezone(timezone.utc).isoformat()
+    utc_end = local_end.astimezone(timezone.utc).isoformat()
+    return utc_start, utc_end
 
 from life_optimizer.collectors.base import CollectorResult
 from life_optimizer.screenshots.capture import ScreenshotResult
@@ -117,8 +139,10 @@ class EventRepository:
         params: list = []
 
         if date:
-            conditions.append("timestamp LIKE ?")
-            params.append(f"{date}%")
+            # Interpret the date in local timezone and match UTC range
+            utc_start, utc_end = _local_date_utc_range(date)
+            conditions.append("timestamp >= ? AND timestamp <= ?")
+            params.extend([utc_start, utc_end])
         if app:
             conditions.append("app_name = ?")
             params.append(app)
@@ -326,8 +350,9 @@ class ScreenshotRepository:
         params: list = []
 
         if date:
-            conditions.append("timestamp LIKE ?")
-            params.append(f"{date}%")
+            utc_start, utc_end = _local_date_utc_range(date)
+            conditions.append("timestamp >= ? AND timestamp <= ?")
+            params.extend([utc_start, utc_end])
 
         where = ""
         if conditions:
@@ -452,8 +477,9 @@ class SessionRepository:
         params: list = []
 
         if date:
-            conditions.append("start_time LIKE ?")
-            params.append(f"{date}%")
+            utc_start, utc_end = _local_date_utc_range(date)
+            conditions.append("start_time >= ? AND start_time <= ?")
+            params.extend([utc_start, utc_end])
 
         where = ""
         if conditions:
@@ -570,8 +596,9 @@ class SummaryRepository:
             conditions.append("period_type = ?")
             params.append(period_type)
         if date:
-            conditions.append("period_start LIKE ?")
-            params.append(f"{date}%")
+            utc_start, utc_end = _local_date_utc_range(date)
+            conditions.append("period_start >= ? AND period_start <= ?")
+            params.extend([utc_start, utc_end])
 
         where = ""
         if conditions:

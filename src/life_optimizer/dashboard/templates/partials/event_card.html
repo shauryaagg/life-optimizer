@@ -5,7 +5,7 @@
         <div class="flex items-start justify-between">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center space-x-2">
-                    <span class="text-xs font-mono text-gray-400">{{ event.timestamp[11:19] if event.timestamp|length > 19 else event.timestamp }}</span>
+                    <span class="text-xs font-mono text-gray-400">{{ event.timestamp | local_time }}</span>
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">{{ event.app_name }}</span>
                     {% if event.category %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">{{ event.category }}</span>

@@ -2,7 +2,7 @@
 <div class="bg-white rounded-lg shadow p-6 space-y-4">
     <div>
         <h2 class="text-lg font-medium text-gray-900">Daily Summary</h2>
-        <p class="text-xs text-gray-400">{{ summary.period_start }} to {{ summary.period_end }}</p>
+        <p class="text-xs text-gray-400">{{ summary.period_start | local_datetime }} to {{ summary.period_end | local_datetime }}</p>
     </div>
     <div class="prose prose-sm max-w-none text-gray-700">
         {{ summary.summary_text | replace('\n', '<br>') | safe }}

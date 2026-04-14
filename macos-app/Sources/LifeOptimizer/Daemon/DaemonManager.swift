@@ -111,17 +111,12 @@ class DaemonManager: ObservableObject {
             process.standardError = stderrHandle
         }
 
-        process.terminationHandler = { [weak self] proc in
-            let status = proc.terminationStatus
+        process.terminationHandler = { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                if status != 0 && self.restartCount < self.maxRestarts {
-                    self.restartCount += 1
-                    self.startDaemon()
-                } else {
-                    self.isRunning = false
-                    self.updateStatusIcon()
-                }
+                // Brief delay to avoid rapid restart loops
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self.startDaemon()
             }
         }
 
@@ -165,6 +160,16 @@ class DaemonManager: ObservableObject {
             stderrHandle.seekToEndOfFile()
             process.standardOutput = stdoutHandle
             process.standardError = stderrHandle
+        }
+
+        // Auto-respawn dashboard if killed (e.g. after config change)
+        process.terminationHandler = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                // Brief delay to avoid rapid restart loops
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self.startDashboard()
+            }
         }
 
         do {
