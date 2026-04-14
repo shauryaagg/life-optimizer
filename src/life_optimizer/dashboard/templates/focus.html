@@ -48,7 +48,7 @@ async function loadFocusTimeline(days) {
     try {
         const resp = await fetch('/api/sessions/timeline?days=' + days);
         const data = await resp.json();
-        renderFocusTimeline(data.sessions || [], 'focus-timeline');
+        renderFocusTimeline(data.sessions || [], 'focus-timeline', parseInt(days));
     } catch (e) {
         console.error('Failed to load focus timeline:', e);
         document.getElementById('focus-timeline').innerHTML =

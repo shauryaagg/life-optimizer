@@ -267,81 +267,129 @@ function renderMonthlyHeatmap(monthData, containerId) {
  * @param {Array} sessions - Array of session objects from /api/sessions/timeline.
  * @param {string} containerId - The container element ID.
  */
-function renderFocusTimeline(sessions, containerId) {
+function renderFocusTimeline(sessions, containerId, numDays) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    if (!sessions || sessions.length === 0) {
-        container.innerHTML = '<div class="text-center py-8 text-gray-500">No session data available.</div>';
-        return;
-    }
+    sessions = sessions || [];
+    numDays = numDays || 7;
 
-    // Group sessions by date
+    // Group by date
     const byDate = {};
     sessions.forEach(s => {
         if (!byDate[s.date]) byDate[s.date] = [];
         byDate[s.date].push(s);
     });
 
-    const dates = Object.keys(byDate).sort().reverse();
-
-    // Full 24-hour range so late-night and early-morning activity shows
-    const startHour = 0;
-    const endHour = 24;
-    const totalMinutes = (endHour - startHour) * 60;
-    // categoryColor defined at top of this file (uses normalizeCategory).
-
-    // Time axis labels
-    let html = '<div class="overflow-x-auto">';
-    html += '<div style="min-width: 800px;">';
-
-    // Time axis
-    html += '<div class="flex mb-1" style="margin-left: 90px;">';
-    for (let h = startHour; h <= endHour; h += 2) {
-        const pct = ((h - startHour) / (endHour - startHour)) * 100;
-        html += '<div class="text-xs text-gray-400" style="position:absolute;left:calc(90px + ' + pct + '% * (100% - 90px) / 100)">' + (h < 10 ? '0' : '') + h + ':00</div>';
+    // Always render `numDays` rows (today going back), even if empty, so
+    // the chart has consistent shape. Dates ordered newest first.
+    const today = new Date();
+    const dates = [];
+    for (let i = 0; i < numDays; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        dates.push(d.toISOString().slice(0, 10));
     }
-    html += '</div>';
 
-    // Simplified: use a flex layout with fixed label + relative container
-    html += '<div style="margin-top: 24px;">';
+    const TOTAL_MIN = 24 * 60;
 
-    dates.forEach(dt => {
-        html += '<div class="flex items-center mb-2">';
-        html += '<div class="text-sm text-gray-600 font-medium" style="width:90px;flex-shrink:0;">' + dt + '</div>';
-        html += '<div class="relative bg-gray-50 rounded border border-gray-200" style="flex:1;height:28px;">';
-
-        (byDate[dt] || []).forEach(s => {
+    // For each day, collapse consecutive sessions with the same category
+    // into contiguous blocks so the user sees clean colored bands instead
+    // of hundreds of pinstripes from per-poll sessions.
+    function buildBlocks(daySessions) {
+        const parsed = [];
+        daySessions.forEach(s => {
             if (!s.start_time) return;
-            const parts = s.start_time.split(':');
-            const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) - startHour * 60;
-            if (startMin < 0) return;
-            // Allow 0-duration (in-progress) sessions with a tiny visible marker
-            const durMin = Math.max(s.duration_minutes || 0.5, 0.5);
-            const leftPct = (startMin / totalMinutes) * 100;
-            const widthPct = Math.max((durMin / totalMinutes) * 100, 0.25);
+            const sp = s.start_time.split(':');
+            const startMin = parseInt(sp[0]) * 60 + parseInt(sp[1]);
+            let endMin;
+            if (s.end_time) {
+                const ep = s.end_time.split(':');
+                endMin = parseInt(ep[0]) * 60 + parseInt(ep[1]);
+                // Handle wrap-around (end past midnight on next UTC day)
+                if (endMin < startMin) endMin += TOTAL_MIN;
+            } else {
+                endMin = startMin + Math.max(s.duration_minutes || 0.5, 0.5);
+            }
+            endMin = Math.min(endMin, TOTAL_MIN);
+            parsed.push({
+                start: startMin,
+                end: endMin,
+                category: s.category || 'Other',
+                app: s.app_name,
+            });
+        });
+        parsed.sort((a, b) => a.start - b.start);
 
-            const tooltip = s.app_name + ' — ' + s.start_time + (s.end_time ? ' to ' + s.end_time : ' (ongoing)') + ' — ' + Math.round(durMin * 10) / 10 + ' min — ' + (s.category || 'Other');
+        // Merge adjacent blocks of the same category if they touch or
+        // overlap (within 2 minutes).
+        const blocks = [];
+        parsed.forEach(p => {
+            const last = blocks[blocks.length - 1];
+            if (last && last.category === p.category && p.start <= last.end + 2) {
+                last.end = Math.max(last.end, p.end);
+                last.apps[p.app] = (last.apps[p.app] || 0) + (p.end - p.start);
+            } else {
+                blocks.push({
+                    start: p.start,
+                    end: p.end,
+                    category: p.category,
+                    apps: { [p.app]: p.end - p.start },
+                });
+            }
+        });
+        return blocks;
+    }
 
-            html += '<div class="absolute rounded" style="left:' + leftPct + '%;width:' + widthPct + '%;height:100%;background:' + categoryColor(s.category) + ';opacity:0.85;" title="' + tooltip.replace(/"/g, '&quot;') + '"></div>';
+    let html = '<div class="overflow-x-auto"><div style="min-width: 720px;">';
+
+    // Rows: one per day
+    dates.forEach(dt => {
+        const blocks = buildBlocks(byDate[dt] || []);
+        const totalMin = blocks.reduce((sum, b) => sum + (b.end - b.start), 0);
+        const hoursStr = totalMin > 0
+            ? Math.floor(totalMin / 60) + 'h ' + Math.round(totalMin % 60) + 'm'
+            : '—';
+
+        html += '<div class="flex items-center mb-2">';
+        html += '<div style="width:100px;flex-shrink:0;" class="pr-2">'
+             + '<div class="text-sm text-gray-700 font-medium">' + dt + '</div>'
+             + '<div class="text-xs text-gray-400">' + hoursStr + '</div>'
+             + '</div>';
+        html += '<div class="relative bg-gray-100 rounded border border-gray-200" style="flex:1;height:32px;">';
+
+        blocks.forEach(b => {
+            const leftPct = (b.start / TOTAL_MIN) * 100;
+            const widthPct = Math.max(((b.end - b.start) / TOTAL_MIN) * 100, 0.3);
+            const dur = Math.round(b.end - b.start);
+            const topApp = Object.entries(b.apps).sort((a, c) => c[1] - a[1])[0][0];
+            const pad = n => (n < 10 ? '0' : '') + n;
+            const startH = Math.floor(b.start / 60), startM = b.start % 60;
+            const endH = Math.floor(b.end / 60) % 24, endM = Math.round(b.end % 60);
+            const tooltip = b.category + ' · ' + pad(startH) + ':' + pad(startM) + '–' + pad(endH) + ':' + pad(endM) + ' · ' + dur + 'min · mostly ' + topApp;
+
+            html += '<div class="absolute" style="left:' + leftPct + '%;width:' + widthPct + '%;height:100%;background:' + categoryColor(b.category) + ';opacity:0.9;" title="' + tooltip.replace(/"/g, '&quot;') + '"></div>';
         });
 
-        html += '</div>';
-        html += '</div>';
+        // Subtle hour gridlines
+        for (let h = 6; h < 24; h += 6) {
+            const pct = (h / 24) * 100;
+            html += '<div class="absolute" style="left:' + pct + '%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.04);"></div>';
+        }
+
+        html += '</div></div>';
     });
 
-    html += '</div>';
-
     // Time axis at bottom — 00, 06, 12, 18, 24
-    html += '<div class="flex items-center mt-1">';
-    html += '<div style="width:90px;flex-shrink:0;"></div>';
-    html += '<div class="relative" style="flex:1;height:16px;">';
+    html += '<div class="flex items-start mt-1">';
+    html += '<div style="width:100px;flex-shrink:0;"></div>';
+    html += '<div class="relative" style="flex:1;height:18px;">';
     for (let h = 0; h <= 24; h += 6) {
         const pct = (h / 24) * 100;
-        html += '<div class="text-xs text-gray-400 absolute" style="left:' + pct + '%;transform:translateX(-50%);">' + (h < 10 ? '0' : '') + h + ':00</div>';
+        const align = h === 0 ? '0' : (h === 24 ? '100% - 3ch' : '-50%');
+        html += '<div class="text-xs text-gray-500 absolute" style="left:' + pct + '%;transform:translateX(' + (h === 0 ? '0' : (h === 24 ? '-100%' : '-50%')) + ');">' + (h < 10 ? '0' : '') + h + ':00</div>';
     }
-    html += '</div>';
-    html += '</div>';
+    html += '</div></div>';
 
     html += '</div></div>';
     container.innerHTML = html;
