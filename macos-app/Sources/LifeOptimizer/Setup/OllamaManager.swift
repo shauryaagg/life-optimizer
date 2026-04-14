@@ -33,9 +33,8 @@ class OllamaManager: ObservableObject {
     private let downloadURL = URL(string: "https://ollama.com/download/Ollama-darwin.zip")!
     private let apiBase = "http://localhost:11434"
 
-    /// Main entry point: make Ollama ready (install/start as needed).
-    /// If any models are already installed, does NOT pull a new one — uses
-    /// what the user already has. Only pulls the default if NO models exist.
+    /// Main entry point: make Ollama ready with qwen3.5:4b specifically.
+    /// Only qwen3.5:4b is supported — if absent, we pull it.
     func ensureReady(installModel: Bool = true) async {
         error = nil
         do {
@@ -54,20 +53,15 @@ class OllamaManager: ObservableObject {
             // Refresh model list
             await refreshModels()
 
-            // Only pull the default model if the user has NO models installed.
-            // Respects user's existing models (e.g. qwen).
-            if installModel && availableModels.isEmpty {
+            // Always ensure qwen3.5:4b is present (the ONLY supported local model)
+            if installModel && !availableModels.contains(defaultModel) {
                 try await pullModel(defaultModel)
                 await refreshModels()
             }
 
-            // Pick the best model: prefer the hardcoded default (qwen3.5:4b)
-            // if present, otherwise fall back to the first available.
-            let chosen = pickBestModel()
-            if let model = chosen {
-                updatePythonConfig(provider: "ollama", model: model)
-                message = "Using model: \(model)"
-            }
+            // Always use qwen3.5:4b for the Python backend
+            updatePythonConfig(provider: "ollama", model: defaultModel)
+            message = "Using model: \(defaultModel)"
 
             status = .ready
             progress = 1.0

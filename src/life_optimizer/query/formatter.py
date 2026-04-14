@@ -164,26 +164,51 @@ class ResponseFormatter:
 
     @staticmethod
     def _result_to_text(raw_result: dict) -> str:
-        """Convert a raw result dict to plain text for the LLM."""
+        """Convert a raw result dict to plain text for the LLM.
+
+        CRITICAL: be explicit when data is empty. Small models hallucinate
+        fake data if we don't spell out "no rows returned".
+        """
         parts = []
         if "sql" in raw_result:
-            parts.append(f"SQL: {raw_result['sql']}")
+            parts.append(f"SQL executed: {raw_result['sql']}")
         if "columns" in raw_result and "rows" in raw_result:
             cols = raw_result["columns"]
             rows = raw_result["rows"]
-            if cols and rows:
+            row_count = raw_result.get("row_count", len(rows) if rows else 0)
+
+            if not cols and not rows:
+                parts.append("QUERY RESULT: no columns or rows returned.")
+            elif not rows:
+                parts.append(
+                    f"QUERY RESULT: 0 rows returned. "
+                    f"Columns that WOULD have been returned: {', '.join(str(c) for c in cols)}. "
+                    f"The database has no data matching this query."
+                )
+            else:
+                parts.append(f"QUERY RESULT: {row_count} row(s) returned")
                 parts.append(f"Columns: {', '.join(str(c) for c in cols)}")
+                parts.append("Data rows (one per line):")
                 for row in rows[:20]:
-                    parts.append(" | ".join(str(v) for v in row))
-                if len(rows) > 20:
-                    parts.append(f"... ({len(rows)} total rows)")
+                    parts.append(" | ".join(str(v) if v is not None else "(null)" for v in row))
+                if row_count > 20:
+                    parts.append(f"... and {row_count - 20} more rows (total {row_count})")
         if "search_results" in raw_result:
-            for r in raw_result["search_results"][:10]:
-                parts.append(f"- {r.get('text', '')}")
+            srs = raw_result["search_results"]
+            if not srs:
+                parts.append("SEMANTIC SEARCH: no matches found.")
+            else:
+                parts.append(f"SEMANTIC SEARCH: {len(srs)} matches:")
+                for r in srs[:10]:
+                    parts.append(f"- {r.get('text', '')}")
         if "summaries" in raw_result:
-            for s in raw_result["summaries"][:5]:
-                if isinstance(s, dict):
-                    parts.append(s.get("summary_text", ""))
+            sums = raw_result["summaries"]
+            if not sums:
+                parts.append("SUMMARIES: none available.")
+            else:
+                for s in sums[:5]:
+                    if isinstance(s, dict):
+                        parts.append(s.get("summary_text", ""))
         if "text" in raw_result:
             parts.append(raw_result["text"])
 

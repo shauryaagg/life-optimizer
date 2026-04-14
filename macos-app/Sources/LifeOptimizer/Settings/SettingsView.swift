@@ -80,18 +80,22 @@ struct LLMSettingsView: View {
         Form {
             Section {
                 Picker("Provider", selection: $llmProvider) {
-                    Text("Claude (Anthropic)").tag("claude")
-                    Text("Ollama (Local)").tag("ollama")
+                    Text("Claude API (API key)").tag("claude")
+                    Text("Claude Code (Max subscription)").tag("claude-code")
+                    Text("Ollama (Local: qwen3.5:4b)").tag("ollama")
                     Text("None (Rule-based only)").tag("none")
                 }
                 .onChange(of: llmProvider) { newValue in
-                    // Auto-install/start Ollama when user switches to it in Settings
                     if newValue == "ollama" {
+                        // Auto-install/start Ollama and write config
                         ollamaBusy = true
                         Task {
                             await ollama.ensureReady(installModel: true)
                             ollamaBusy = false
                         }
+                    } else {
+                        // For claude, claude-code, none — write provider to config
+                        ollama.updatePythonConfig(provider: newValue, model: "qwen3.5:4b")
                     }
                 }
             } header: {
@@ -117,8 +121,34 @@ struct LLMSettingsView: View {
                                 .foregroundColor(status == "Saved" ? .green : .red)
                         }
                     }
+                    Text("Requires API credit balance on your Anthropic account.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 } header: {
                     Text("Anthropic API Key")
+                }
+            }
+
+            if llmProvider == "claude-code" {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Requires Claude Code installed and logged in", systemImage: "exclamationmark.circle")
+                            .foregroundColor(.orange)
+                            .font(.headline)
+                        Text("Life Optimizer shells out to the `claude` CLI to use your Claude Max/Pro subscription. Before using this provider:")
+                            .font(.caption)
+                        Text("1. Install Claude Code from https://claude.ai/download")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("2. Open Claude Code and sign in with your account")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("3. Verify `claude --version` works in Terminal")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } header: {
+                    Text("Claude Max Subscription")
                 }
             }
 

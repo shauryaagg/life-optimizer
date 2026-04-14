@@ -18,22 +18,34 @@ DATABASE SCHEMA:
 {SCHEMA_SQL}
 
 RULES:
-- Generate ONLY SELECT statements. Never generate INSERT, UPDATE, DELETE, DROP, ALTER, or CREATE.
-- Use datetime functions for time-based queries (e.g., date(timestamp), time(timestamp)).
-- For "today", use date('now'). For "yesterday", use date('now', '-1 day').
-- The timestamp columns store ISO 8601 format strings.
-- The category column contains values like: Deep Work, Communication, Browsing, Social Media, Entertainment, Planning, Learning, Personal, Other.
-- context_json is a JSON string that may contain "url", "title", and other fields.
-- duration_seconds may be NULL for events without duration tracking.
-- Always include reasonable LIMIT clauses (default 100).
+- Generate ONLY SELECT statements. Never INSERT/UPDATE/DELETE/DROP/ALTER/CREATE.
+- Always include a reasonable LIMIT (default 100).
+
+DATETIME HANDLING (IMPORTANT — SQLite-specific syntax):
+- Timestamps are stored as ISO 8601 strings (UTC). Examples: "2026-04-14T02:58:00+00:00"
+- To get today's date, use: date('now', 'localtime')
+- To get the start of today: datetime('now', 'start of day', 'localtime')
+- Valid SQLite datetime modifiers: 'start of day', 'start of month', 'start of year', '-1 day', '+1 hour', 'localtime', 'utc'
+- INVALID modifiers that do NOT exist: 'beginning of day', 'end of day', 'noon', 'midnight'
+- For "today": WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+- For "yesterday": WHERE date(timestamp, 'localtime') = date('now', '-1 day', 'localtime')
+- For a time range: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'utc') AND timestamp < datetime('now', 'start of day', 'utc')
+
+DATA NOTES:
+- category values: Deep Work, Communication, Browsing, Social Media, Entertainment, Planning, Learning, Personal, Other.
+- context_json is a JSON string that may contain url, title, and other fields. Use json_extract(context_json, '$.url').
+- duration_seconds may be NULL. Use COALESCE(duration_seconds, 0) for aggregation.
 
 Respond with ONLY the SQL query. No markdown fences, no explanation."""
 
 FORMATTER_SYSTEM = """You are a helpful assistant that formats database query results into readable, conversational answers.
-Given a user's question and raw data results, provide a clear and concise answer.
-Be direct and specific. Use actual numbers from the data.
-If the data is empty, say so clearly.
-Do not fabricate data that is not in the results."""
+
+Rules:
+1. Use ONLY the actual values shown in the raw results. Do NOT use placeholder syntax like {app_name} or {window_title} — the column names in the raw data are NOT variables to fill in, they're just labels for the data that follows.
+2. Be direct and specific with actual numbers from the data.
+3. If the results are empty (no rows, no data), say "No data found" clearly and stop. Do not invent data.
+4. If a value is None or null, skip it or say "not recorded" — never write None or null or {placeholders} in the user-facing response.
+5. Keep responses concise: 1-3 sentences for simple questions, a short list for detailed ones."""
 
 CATEGORIZATION_EXAMPLES = {
     "structured": [

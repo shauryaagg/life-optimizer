@@ -312,8 +312,9 @@ struct LLMSetupStepView: View {
                 .foregroundColor(.secondary)
 
             Picker("Provider", selection: $llmProvider) {
-                Text("Claude (Anthropic API)").tag("claude")
-                Text("Ollama (100% Local)").tag("ollama")
+                Text("Claude API (API key)").tag("claude")
+                Text("Claude Code (Max subscription)").tag("claude-code")
+                Text("Ollama (Local: qwen3.5:4b)").tag("ollama")
                 Text("None (Rule-based only)").tag("none")
             }
             .pickerStyle(.radioGroup)
@@ -326,7 +327,23 @@ struct LLMSetupStepView: View {
                         .foregroundColor(.secondary)
                     SecureField("sk-ant-...", text: $apiKey)
                         .textFieldStyle(.roundedBorder)
-                    Text("Stored in macOS Keychain. Only summaries sent to API, never raw data.")
+                    Text("Requires API credit balance on your Anthropic account.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 24)
+            } else if llmProvider == "claude-code" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Requires Claude Code installed and logged in", systemImage: "exclamationmark.circle")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    Text("Life Optimizer will shell out to the `claude` CLI to use your Max/Pro subscription.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text("1. Install Claude Code from claude.ai/download")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text("2. Open Claude Code and sign in")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -347,15 +364,15 @@ struct LLMSetupStepView: View {
                         HStack {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("Ollama is ready with llama3.1:8b")
+                            Text("Ollama is ready with qwen3.5:4b")
                                 .font(.caption)
                         }
                     } else if ollamaManager.isInstalled() {
-                        Text("Ollama is installed. We'll start it and pull llama3.1:8b when you click Continue.")
+                        Text("Ollama is installed. We'll ensure qwen3.5:4b is pulled and start it when you click Continue.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     } else {
-                        Text("Ollama is not installed. We'll download and install it for you when you click Continue.")
+                        Text("Ollama is not installed. We'll download and install it, then pull qwen3.5:4b when you click Continue.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -384,9 +401,13 @@ struct LLMSetupStepView: View {
                         if !apiKey.isEmpty {
                             setupManager.saveAPIKey(apiKey)
                         }
+                        ollamaManager.updatePythonConfig(provider: "claude", model: "qwen3.5:4b")
+                        setupManager.nextStep()
+                    } else if llmProvider == "claude-code" {
+                        ollamaManager.updatePythonConfig(provider: "claude-code", model: "qwen3.5:4b")
                         setupManager.nextStep()
                     } else if llmProvider == "ollama" {
-                        // Auto-install and/or start Ollama
+                        // Auto-install and/or start Ollama (writes config internally)
                         ollamaBusy = true
                         Task {
                             await ollamaManager.ensureReady(installModel: true)
@@ -396,6 +417,7 @@ struct LLMSetupStepView: View {
                             }
                         }
                     } else {
+                        ollamaManager.updatePythonConfig(provider: "none", model: "qwen3.5:4b")
                         setupManager.nextStep()
                     }
                 }
