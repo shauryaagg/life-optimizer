@@ -32,7 +32,7 @@ class WorkspaceListener:
     def _run(self):
         try:
             from AppKit import NSWorkspace, NSRunLoop
-            from Foundation import NSObject
+            from Foundation import NSObject, NSDate
             import objc
 
             class Observer(NSObject):
@@ -72,12 +72,15 @@ class WorkspaceListener:
 
             logger.info("NSWorkspace observer registered, starting run loop")
             run_loop = NSRunLoop.currentRunLoop()
+            # Run loop with 1-second blocking wait. Without a fixed timeout,
+            # limitDateForMode_ returns a past date when no events are pending,
+            # causing runMode_beforeDate_ to return immediately and the loop
+            # to busy-spin at 100% CPU.
             while self._running:
+                timeout_date = NSDate.dateWithTimeIntervalSinceNow_(1.0)
                 run_loop.runMode_beforeDate_(
                     "NSDefaultRunLoopMode",
-                    NSRunLoop.currentRunLoop().limitDateForMode_(
-                        "NSDefaultRunLoopMode"
-                    ),
+                    timeout_date,
                 )
 
         except ImportError:

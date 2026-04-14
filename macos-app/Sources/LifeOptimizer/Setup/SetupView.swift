@@ -79,7 +79,7 @@ struct WelcomeStepView: View {
 
 struct PermissionsStepView: View {
     @ObservedObject var setupManager: SetupManager
-    @State private var hasRequestedAccessibility = false
+    @State private var lastCheckedMessage: String = ""
     @State private var pollingTimer: Timer?
 
     var body: some View {
@@ -89,7 +89,7 @@ struct PermissionsStepView: View {
                 .fontWeight(.bold)
                 .padding(.top, 20)
 
-            Text("Life Optimizer needs macOS permissions to track your activity.")
+            Text("Life Optimizer needs **Accessibility** permission. Screen Recording is optional (for screenshots).")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -101,7 +101,7 @@ struct PermissionsStepView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Accessibility")
                             .font(.headline)
-                        Text("Required to detect which app is active")
+                        Text("Detect which app is active")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -110,13 +110,6 @@ struct PermissionsStepView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.title3)
-                    } else if !hasRequestedAccessibility {
-                        Button("Grant") {
-                            hasRequestedAccessibility = true
-                            setupManager.requestAccessibility()
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     } else {
                         Button("Open Settings") {
                             setupManager.openAccessibilitySettings()
@@ -133,21 +126,16 @@ struct PermissionsStepView: View {
                               : Color.secondary.opacity(0.05))
                 )
 
-                // Screen Recording — informational only
+                // Screen Recording — optional, informational only
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Screen Recording")
                             .font(.headline)
-                        Text("Optional — for smart screenshots")
+                        Text("Optional — enable later in Settings for screenshots")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
-                    Button("Open Settings") {
-                        setupManager.openScreenRecordingSettings()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
                 .padding(12)
                 .background(
@@ -157,11 +145,19 @@ struct PermissionsStepView: View {
             }
             .padding(.horizontal, 24)
 
-            if hasRequestedAccessibility && !setupManager.accessibilityGranted {
-                Text("After granting in System Settings, click \"Check Again\" below.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 24)
+            if !setupManager.accessibilityGranted {
+                VStack(spacing: 4) {
+                    Text("After granting Accessibility, you may need to quit and reopen Life Optimizer for it to take effect.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    if !lastCheckedMessage.isEmpty {
+                        Text(lastCheckedMessage)
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+                .padding(.horizontal, 24)
             }
 
             Spacer()
@@ -172,12 +168,13 @@ struct PermissionsStepView: View {
 
                 Spacer()
 
-                if hasRequestedAccessibility && !setupManager.accessibilityGranted {
-                    Button("Check Again") {
-                        setupManager.checkAccessibility()
-                    }
-                    .buttonStyle(.bordered)
+                Button("Check Again") {
+                    setupManager.checkAccessibility()
+                    lastCheckedMessage = setupManager.accessibilityGranted
+                        ? "✓ Granted!"
+                        : "Not detected yet. Try quitting and reopening the app."
                 }
+                .buttonStyle(.bordered)
 
                 Button("Continue") { setupManager.nextStep() }
                     .buttonStyle(.borderedProminent)

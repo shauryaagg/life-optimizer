@@ -8,13 +8,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     let daemonManager = DaemonManager()
     let setupManager = SetupManager()
+    let screenshotCapture = ScreenshotCapture(interval: 30)
+    let statusItemManager = StatusItemManager()
 
     private var hotkeyManager = HotkeyManager()
     private var spotlightPanel: SpotlightPanel?
     private let chatViewModel = ChatViewModel()
     private var setupWindowController: NSWindowController?
+    private var workspaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Install the menubar status item FIRST (always visible)
+        statusItemManager.install(appDelegate: self)
+
         // Create spotlight panel (hidden initially)
         spotlightPanel = SpotlightPanel(chatViewModel: chatViewModel)
 
@@ -26,7 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Decide: show onboarding or start daemon
         if setupManager.isSetupComplete {
             NSApp.setActivationPolicy(.accessory)
-            daemonManager.startAll()
+            startTracking()
         } else {
             NSApp.setActivationPolicy(.regular)
             showSetupWindow()
@@ -35,7 +41,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager.unregister()
+        screenshotCapture.stop()
+        if let observer = workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
         daemonManager.stopAll()
+    }
+
+    // MARK: - Tracking lifecycle
+
+    /// Start both the Python daemon (for activity tracking) AND the Swift-side
+    /// screenshot capture (which uses the Swift app's TCC permissions).
+    private func startTracking() {
+        daemonManager.startAll()
+        screenshotCapture.start()
+
+        // Listen for app switches to trigger immediate screenshots
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+               let name = app.localizedName {
+                Task { @MainActor [weak self] in
+                    self?.screenshotCapture.captureOnAppSwitch(appName: name)
+                }
+            }
+        }
     }
 
     // MARK: - Setup Window
@@ -63,7 +96,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.setupWindowController?.close()
             self?.setupWindowController = nil
             NSApp.setActivationPolicy(.accessory)
-            self?.daemonManager.startAll()
+            self?.startTracking()
         }
         window.contentView = NSHostingView(rootView: setupView)
 

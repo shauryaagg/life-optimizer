@@ -25,7 +25,10 @@ storage:
   db_path: ./data/life_optimizer.db
 
 screenshots:
-  enabled: true
+  # Disabled in the Python daemon — the Swift app handles screenshot capture
+  # directly using its own TCC permissions, avoiding the permission spam caused
+  # by TCC not carrying from Swift parent to Python subprocess.
+  enabled: false
   interval: 30
   quality: 60
   scale: 0.5
