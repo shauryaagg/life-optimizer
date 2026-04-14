@@ -2,17 +2,30 @@
  * Chart rendering functions for the Life Optimizer dashboard.
  */
 
+// Keys normalized to lowercase. Lookups use normalizeCategory() below.
 const CATEGORY_COLORS = {
-    'deep_work': '#10b981',
+    'deep work': '#10b981',
+    'development': '#10b981',
     'communication': '#3b82f6',
     'browsing': '#8b5cf6',
-    'social_media': '#ef4444',
+    'social media': '#ef4444',
     'entertainment': '#f59e0b',
     'planning': '#06b6d4',
+    'productivity': '#06b6d4',
     'learning': '#84cc16',
     'personal': '#ec4899',
     'other': '#6b7280',
 };
+
+function normalizeCategory(cat) {
+    if (!cat) return 'other';
+    // "Deep Work" -> "deep work", "deep_work" -> "deep work"
+    return String(cat).toLowerCase().replace(/_/g, ' ').trim();
+}
+
+function categoryColor(cat) {
+    return CATEGORY_COLORS[normalizeCategory(cat)] || CATEGORY_COLORS['other'];
+}
 
 /**
  * Render a category pie chart.
@@ -37,12 +50,16 @@ function renderCategoryChart(canvasId, data) {
         return null;
     }
 
-    const colors = labels.map(l => CATEGORY_COLORS[l] || CATEGORY_COLORS['other']);
+    const colors = labels.map(l => categoryColor(l));
 
     return new Chart(canvas, {
         type: 'doughnut',
         data: {
-            labels: labels.map(l => l.replace('_', ' ')),
+            labels: labels.map(l => {
+                // Normalize label display: "deep_work" -> "Deep Work", leave already-cased strings
+                const s = String(l).replace(/_/g, ' ');
+                return s.charAt(0).toUpperCase() + s.slice(1);
+            }),
             datasets: [{
                 data: values,
                 backgroundColor: colors,
@@ -268,24 +285,11 @@ function renderFocusTimeline(sessions, containerId) {
 
     const dates = Object.keys(byDate).sort().reverse();
 
-    // Time range: 6:00 - 24:00 (18 hours)
-    const startHour = 6;
+    // Full 24-hour range so late-night and early-morning activity shows
+    const startHour = 0;
     const endHour = 24;
     const totalMinutes = (endHour - startHour) * 60;
-
-    function categoryColor(cat) {
-        const map = {
-            'deep_work': '#10b981',
-            'communication': '#3b82f6',
-            'browsing': '#8b5cf6',
-            'social_media': '#ef4444',
-            'entertainment': '#f59e0b',
-            'planning': '#06b6d4',
-            'learning': '#84cc16',
-            'personal': '#ec4899',
-        };
-        return map[cat] || '#6b7280';
-    }
+    // categoryColor defined at top of this file (uses normalizeCategory).
 
     // Time axis labels
     let html = '<div class="overflow-x-auto">';
@@ -312,15 +316,14 @@ function renderFocusTimeline(sessions, containerId) {
             const parts = s.start_time.split(':');
             const startMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) - startHour * 60;
             if (startMin < 0) return;
-            const durMin = s.duration_minutes || 0;
-            if (durMin <= 0) return;
-
+            // Allow 0-duration (in-progress) sessions with a tiny visible marker
+            const durMin = Math.max(s.duration_minutes || 0.5, 0.5);
             const leftPct = (startMin / totalMinutes) * 100;
-            const widthPct = Math.max((durMin / totalMinutes) * 100, 0.5);
+            const widthPct = Math.max((durMin / totalMinutes) * 100, 0.25);
 
-            const tooltip = s.app_name + ' | ' + s.start_time + ' - ' + (s.end_time || '?') + ' | ' + Math.round(durMin) + 'min | ' + (s.category || 'other').replace('_', ' ');
+            const tooltip = s.app_name + ' — ' + s.start_time + (s.end_time ? ' to ' + s.end_time : ' (ongoing)') + ' — ' + Math.round(durMin * 10) / 10 + ' min — ' + (s.category || 'Other');
 
-            html += '<div class="absolute rounded" style="left:' + leftPct + '%;width:' + widthPct + '%;height:100%;background:' + categoryColor(s.category) + ';opacity:0.8;" title="' + tooltip + '"></div>';
+            html += '<div class="absolute rounded" style="left:' + leftPct + '%;width:' + widthPct + '%;height:100%;background:' + categoryColor(s.category) + ';opacity:0.85;" title="' + tooltip.replace(/"/g, '&quot;') + '"></div>';
         });
 
         html += '</div>';
@@ -329,12 +332,12 @@ function renderFocusTimeline(sessions, containerId) {
 
     html += '</div>';
 
-    // Time axis at bottom
+    // Time axis at bottom — 00, 06, 12, 18, 24
     html += '<div class="flex items-center mt-1">';
     html += '<div style="width:90px;flex-shrink:0;"></div>';
     html += '<div class="relative" style="flex:1;height:16px;">';
-    for (let h = startHour; h <= endHour; h += 2) {
-        const pct = ((h - startHour) / (endHour - startHour)) * 100;
+    for (let h = 0; h <= 24; h += 6) {
+        const pct = (h / 24) * 100;
         html += '<div class="text-xs text-gray-400 absolute" style="left:' + pct + '%;transform:translateX(-50%);">' + (h < 10 ? '0' : '') + h + ':00</div>';
     }
     html += '</div>';

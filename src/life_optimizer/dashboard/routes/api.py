@@ -244,8 +244,22 @@ async def api_sessions_timeline(request: Request, days: int = 7):
     db = request.app.state.db
     repo = SessionRepository(db)
 
+    from datetime import timezone
+
     today = date.today()
     result_sessions = []
+
+    def to_local_hhmm(iso_str: str | None) -> str:
+        if not iso_str:
+            return ""
+        try:
+            s = iso_str.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone().strftime("%H:%M")
+        except Exception:
+            return ""
 
     for i in range(days):
         day = today - timedelta(days=i)
@@ -253,23 +267,12 @@ async def api_sessions_timeline(request: Request, days: int = 7):
         sessions = await repo.get_sessions(date=day_str)
 
         for s in sessions:
-            start_time = ""
-            end_time = ""
-            try:
-                start_dt = datetime.fromisoformat(s.start_time)
-                start_time = start_dt.strftime("%H:%M")
-                if s.end_time:
-                    end_dt = datetime.fromisoformat(s.end_time)
-                    end_time = end_dt.strftime("%H:%M")
-            except (ValueError, TypeError):
-                pass
-
             result_sessions.append({
                 "date": day_str,
-                "start_time": start_time,
-                "end_time": end_time,
+                "start_time": to_local_hhmm(s.start_time),
+                "end_time": to_local_hhmm(s.end_time),
                 "app_name": s.app_name,
-                "category": s.category or "other",
+                "category": s.category or "Other",
                 "duration_minutes": round((s.duration_seconds or 0) / 60, 1),
             })
 
