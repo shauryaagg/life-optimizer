@@ -34,9 +34,25 @@ class DaemonManager: ObservableObject {
     // MARK: - Lifecycle
 
     func startAll() {
+        killOrphanedProcesses()
         startDaemon()
         startDashboard()
         startHealthMonitor()
+    }
+
+    /// Kill any orphaned life_optimizer Python processes from previous runs.
+    /// This prevents multiple daemons from accumulating and hammering the system.
+    private func killOrphanedProcesses() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        task.arguments = ["-9", "-f", "life_optimizer (start|dashboard)"]
+        do {
+            try task.run()
+            task.waitUntilExit()
+            // pkill returns 1 if no matches, 0 if matched — both are fine
+        } catch {
+            // Best effort
+        }
     }
 
     func stopAll() {

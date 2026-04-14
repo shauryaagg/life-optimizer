@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 from datetime import datetime, timezone
+from pathlib import Path
 
 from life_optimizer.collectors.base import CollectorResult
 from life_optimizer.collectors.jxa_bridge import JXABridge
@@ -77,6 +79,9 @@ class Daemon:
 
         logger.info("Starting Life Optimizer daemon...")
         logger.info("Poll interval: %.1fs", self._config.daemon.poll_interval)
+
+        # Acquire PID lock — kill any existing daemon first
+        self._acquire_pid_lock()
 
         # Initialize database
         self._db = Database(self._config.storage.db_path)
@@ -170,10 +175,63 @@ class Daemon:
         logger.info("Stop requested")
         self._running = False
 
+    def _acquire_pid_lock(self) -> None:
+        """Kill any existing daemon and write our PID to a lockfile."""
+        lock_path = Path(self._config.storage.db_path).parent / "daemon.pid"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # If a PID file exists, check if that process is still running
+        if lock_path.exists():
+            try:
+                old_pid = int(lock_path.read_text().strip())
+                if old_pid != os.getpid():
+                    try:
+                        # Check if alive: kill -0 doesn't kill, just probes
+                        os.kill(old_pid, 0)
+                        # It's alive — terminate it
+                        logger.warning("Killing existing daemon PID %d", old_pid)
+                        os.kill(old_pid, signal.SIGTERM)
+                        import time
+                        time.sleep(1)
+                        try:
+                            os.kill(old_pid, 0)
+                            # Still alive after SIGTERM, force kill
+                            os.kill(old_pid, signal.SIGKILL)
+                            time.sleep(0.5)
+                        except ProcessLookupError:
+                            pass  # Exited cleanly
+                    except ProcessLookupError:
+                        pass  # Not running — stale lockfile
+            except (ValueError, OSError) as e:
+                logger.debug("Could not parse existing PID file: %s", e)
+
+        # Write our PID
+        try:
+            lock_path.write_text(str(os.getpid()))
+            logger.info("Acquired daemon lock: %s (PID %d)", lock_path, os.getpid())
+        except OSError as e:
+            logger.warning("Failed to write PID lock: %s", e)
+
+        self._pid_lock_path = lock_path
+
+    def _release_pid_lock(self) -> None:
+        """Remove the PID lockfile on clean shutdown."""
+        lock_path = getattr(self, "_pid_lock_path", None)
+        if lock_path is None:
+            return
+        try:
+            if lock_path.exists():
+                current = lock_path.read_text().strip()
+                if current == str(os.getpid()):
+                    lock_path.unlink()
+        except OSError:
+            pass
+
     async def _cleanup(self) -> None:
         """Clean up resources on shutdown."""
         # End any active session
         await self._end_current_session()
+        self._release_pid_lock()
 
         if self._repo is not None and self._db is not None:
             try:

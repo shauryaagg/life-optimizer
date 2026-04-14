@@ -77,6 +77,9 @@ class ScreenshotCapture:
             from PIL import Image
 
             with Image.open(raw_path) as img:
+                # macOS screencapture produces RGBA PNGs; JPEG needs RGB
+                if img.mode in ("RGBA", "LA", "P"):
+                    img = img.convert("RGB")
                 new_w = int(img.width * self._scale)
                 new_h = int(img.height * self._scale)
                 resized = img.resize((new_w, new_h), Image.LANCZOS)
